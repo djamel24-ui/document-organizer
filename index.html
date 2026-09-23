@@ -92,7 +92,7 @@ select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--lin
 
   <div class="card hidden" id="docsCard">
     <b>Ready to download</b>
-    <p class="status">Each row below is one document made from the adjacent same-type pages. Download the ones you need.</p>
+    <p class="status">Each row below combines every page you labeled the same type — download the ones you need.</p>
     <div class="docs" id="docs"></div>
   </div>
 </div>
@@ -271,12 +271,12 @@ document.addEventListener('keydown', e=>{
 document.getElementById('groupBtn').addEventListener('click', buildGroups);
 
 async function buildGroups(){
-  const groups = [];
+  const byType = new Map();
   pages.forEach(p=>{
-    const last = groups[groups.length-1];
-    if (last && last.type === p.type) last.pageIndexes.push(p.index);
-    else groups.push({type:p.type, pageIndexes:[p.index]});
+    if(!byType.has(p.type)) byType.set(p.type, []);
+    byType.get(p.type).push(p.index);
   });
+  const groups = Array.from(byType.entries()).map(([type,pageIndexes])=>({type,pageIndexes}));
   const docsEl = document.getElementById('docs');
   docsEl.innerHTML = '';
   let downloadsNs = null, dlErr = null;
