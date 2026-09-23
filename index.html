@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scan Your PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+:root{
+  --bg:#f7f6f3; --card:#ffffff; --ink:#1c1a17; --sub:#6b6559; --line:#e6e2da;
+  --accent:#8a1f1f; --accent2:#c9a15a; --ok:#2f6b3f; --warn:#b5762b;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  box-sizing:border-box;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#161412; --card:#211e1a; --ink:#f2efe9; --sub:#a89f8f; --line:#38332c; }
+}
+:root[data-theme="dark"]{ --bg:#161412; --card:#211e1a; --ink:#f2efe9; --sub:#a89f8f; --line:#38332c; }
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
+.wrap{max-width:900px;margin:0 auto;padding:28px 20px 60px;}
+h1{font-size:1.5rem;margin:0 0 4px;}
+p.lead{color:var(--sub);margin:0 0 22px;font-size:.95rem;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;}
+.dropzone{border:2px dashed var(--line);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:.15s}
+.dropzone:hover{border-color:var(--accent2)}
+.dropzone input{display:none}
+button{font:inherit;border:none;border-radius:9px;padding:9px 16px;cursor:pointer;background:var(--accent);color:#fff;}
+button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+button:disabled{opacity:.5;cursor:default}
+select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);max-width:100%;}
+.status{font-size:.85rem;color:var(--sub);margin-top:10px;min-height:1.2em}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;margin-top:14px;}
+.pg{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:.78rem;}
+.pg canvas{width:100%;border-radius:6px;border:1px solid var(--line);display:block;margin-bottom:6px;}
+.pg .num{color:var(--sub);font-size:.72rem;margin-bottom:4px;}
+.tag{display:inline-block;font-size:.68rem;padding:2px 6px;border-radius:5px;margin-bottom:5px;color:#fff;}
+.tag.ok{background:var(--ok)} .tag.warn{background:var(--warn)}
+.docs{margin-top:14px;display:flex;flex-direction:column;gap:10px;}
+.doc{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);flex-wrap:wrap}
+.doc .meta{flex:1;min-width:180px}
+.doc .meta b{font-size:.92rem}
+.doc .meta span{display:block;color:var(--sub);font-size:.78rem;margin-top:2px}
+.hidden{display:none !important}
+.bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:10px}
+.bar>i{display:block;height:100%;background:var(--accent);width:0%;transition:.2s}
+.pg img{cursor:zoom-in}
+.note{font-size:.82rem;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:10px;color:var(--sub);line-height:1.5}
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));}
+.lb img{max-width:92vw;max-height:66vh;border-radius:8px;background:#fff;}
+.lb .lbTop{width:100%;max-width:640px;display:flex;justify-content:space-between;align-items:center;color:#fff;margin-bottom:10px;font-size:.9rem}
+.lb .lbTop button{background:transparent;border:1px solid #fff;color:#fff;padding:5px 10px;}
+.lb .lbNav{display:flex;gap:14px;align-items:center;margin-top:14px;width:100%;max-width:640px;justify-content:center;flex-wrap:wrap}
+.lb select{min-width:220px}
+.lb.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Scan Your PDF</h1>
+  <p class="lead">Upload one multi-page PDF containing several documents (passport, certificates, transcripts, English proof, etc). Pages with readable text are labeled automatically; tap any thumbnail to view it full-size and confirm or fix the label. Nothing is split or downloaded until you group and confirm.</p>
+
+  <div class="card">
+    <div class="dropzone" id="drop">
+      <input type="file" id="file" accept="application/pdf">
+      <div id="dzLabel">📄 Click to choose a PDF, or drag one here</div>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="bar hidden" id="barWrap"><i id="bar"></i></div>
+  </div>
+
+  <div class="card hidden" id="pagesCard">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <b>Detected pages — fix any label, then group</b>
+      <button id="groupBtn">Group into documents →</button>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="note" id="ocrNote"></div>
+  </div>
+
+  <div class="lb hidden" id="lightbox">
+    <div class="lbTop"><span id="lbTitle"></span><button id="lbClose">Close ✕</button></div>
+    <img id="lbImg">
+    <div class="lbNav">
+      <button id="lbPrev" class="secondary" style="color:#fff;border-color:#fff">← Prev</button>
+      <select id="lbSelect"></select>
+      <button id="lbNext" class="secondary" style="color:#fff;border-color:#fff">Next →</button>
+    </div>
+  </div>
+
+  <div class="card hidden" id="docsCard">
+    <b>Ready to download</b>
+    <p class="status">Each row below is one document made from the adjacent same-type pages. Download the ones you need.</p>
+    <div class="docs" id="docs"></div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const { PDFDocument } = PDFLib;
+
+const TYPES = [
+  ["passport_front","Passport"],
+  ["photo_white_bg","Photo (white background)"],
+  ["highschool_cert_english","High school certificate (English)"],
+  ["highschool_cert_original","High school certificate (original language)"],
+  ["highschool_transcript_english","High school transcript (English)"],
+  ["highschool_transcript_original","High school transcript (original language)"],
+  ["bachelor_cert_english","Bachelor certificate (English)"],
+  ["bachelor_cert_original","Bachelor certificate (original language)"],
+  ["bachelor_transcript_english","Bachelor transcript (English)"],
+  ["bachelor_transcript_original","Bachelor transcript (original language)"],
+  ["master_cert_english","Master certificate (English)"],
+  ["master_cert_original","Master certificate (original language)"],
+  ["master_transcript_english","Master transcript (English)"],
+  ["master_transcript_original","Master transcript (original language)"],
+  ["english_proof","English proof (IELTS/TOEFL/MUET/MOI)"],
+  ["cv","CV"],
+  ["sponsor_bank_statement","Sponsor letter + bank statement"],
+  ["research_proposal","Research proposal"],
+  ["publications","Publications / conference papers"],
+  ["notarial","Notarial"],
+  ["online_verification","Online Verification"],
+  ["visa_passport_copy","Visa — passport copy"],
+  ["unsorted","Unsorted / other"]
+];
+
+function classify(text){
+  const t = text.toLowerCase();
+  const arabicRatio = (text.match(/[\u0600-\u06FF]/g)||[]).length / Math.max(text.length,1);
+  const isOriginalLang = arabicRatio > 0.15 && !/legal translation/i.test(text);
+  if (/passport|p<[a-z]{3}/i.test(t)) return "passport_front";
+  if (/ielts|toefl|esol|muet|medium of instruction|english language course|preliminary english test/.test(t)) return "english_proof";
+  if (/icdl|computer driving licence/.test(t)) return "unsorted";
+  if (/master/.test(t) && /transcript|credit|grade/.test(t)) return isOriginalLang ? "master_transcript_original":"master_transcript_english";
+  if (/master/.test(t) && /degree|has obtained|notifies hereby|certify/.test(t)) return isOriginalLang ? "master_cert_original":"master_cert_english";
+  if (/bachelor/.test(t) && /transcript|credit|grade|academic year/.test(t)) return isOriginalLang ? "bachelor_transcript_original":"bachelor_transcript_english";
+  if (/bachelor/.test(t) && /degree|has obtained|notifies hereby|certify|passed successfully/.test(t)) return isOriginalLang ? "bachelor_cert_original":"bachelor_cert_english";
+  if (/high school|secondary school/.test(t) && /transcript|grade/.test(t)) return isOriginalLang ? "highschool_transcript_original":"highschool_transcript_english";
+  if (/high school|secondary school/.test(t) && /certificate/.test(t)) return isOriginalLang ? "highschool_cert_original":"highschool_cert_english";
+  if (/research proposal/.test(t)) return "research_proposal";
+  if (/bank statement|sponsor/.test(t)) return "sponsor_bank_statement";
+  if (/curriculum vitae|\bcv\b/.test(t)) return "cv";
+  return "unsorted";
+}
+
+let pages = []; // {index, canvas(dataURL), text, type, confident}
+let pdfDocRef = null;
+let lbIndex = 0;
+
+const fileInput = document.getElementById('file');
+const drop = document.getElementById('drop');
+drop.addEventListener('click', ()=>fileInput.click());
+drop.addEventListener('dragover', e=>{e.preventDefault();});
+drop.addEventListener('drop', e=>{e.preventDefault(); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+const statusEl = document.getElementById('status');
+const barWrap = document.getElementById('barWrap');
+const bar = document.getElementById('bar');
+let rawBytes = null;
+
+async function handleFile(file){
+  document.getElementById('dzLabel').textContent = "📄 " + file.name;
+  statusEl.textContent = "Reading PDF…";
+  barWrap.classList.remove('hidden'); bar.style.width='5%';
+  rawBytes = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: rawBytes.slice(0)}).promise;
+  pdfDocRef = pdf;
+  pages = [];
+  for (let i=1;i<=pdf.numPages;i++){
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({scale: 0.55});
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+    const textContent = await page.getTextContent();
+    const text = textContent.items.map(it=>it.str).join(' ');
+    const confident = text.trim().length > 20;
+    const type = confident ? classify(text) : "unsorted";
+    pages.push({index:i, dataUrl: canvas.toDataURL('image/jpeg',0.7), text, type, confident});
+    bar.style.width = (5 + (i/pdf.numPages)*90) + '%';
+  }
+  bar.style.width='100%';
+  const unclear = pages.filter(p=>!p.confident).length;
+  statusEl.textContent = `${pdf.numPages} page(s) read. Review the labels below.`;
+  const noteEl = document.getElementById('ocrNote');
+  if (unclear){
+    noteEl.textContent = `${unclear} page(s) have no readable text layer (photographed/scanned pages, e.g. the passport or stamped certificates) — those are set to "check manually" since this tool can't guess from an image alone here. Tap a thumbnail to view it full-size and pick the right label.`;
+  } else {
+    noteEl.textContent = '';
+  }
+  renderGrid();
+  document.getElementById('pagesCard').classList.remove('hidden');
+  document.getElementById('docsCard').classList.add('hidden');
+  setTimeout(()=>barWrap.classList.add('hidden'), 600);
+}
+
+function renderGrid(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  pages.forEach(p=>{
+    const div = document.createElement('div');
+    div.className = 'pg';
+    const tag = p.confident ? `<span class="tag ok">auto-detected</span>` : `<span class="tag warn">check manually</span>`;
+    const opts = TYPES.map(([id,label])=>`<option value="${id}" ${id===p.type?'selected':''}>${label}</option>`).join('');
+    div.innerHTML = `<div class="num">Page ${p.index}</div><img src="${p.dataUrl}" data-idx="${p.index}" style="width:100%;border-radius:6px;border:1px solid var(--line);margin-bottom:6px;">${tag}<select data-idx="${p.index}">${opts}</select>`;
+    grid.appendChild(div);
+  });
+  grid.querySelectorAll('select').forEach(sel=>{
+    sel.addEventListener('change', e=>{
+      const idx = parseInt(e.target.dataset.idx);
+      pages.find(p=>p.index===idx).type = e.target.value;
+      renderGrid();
+    });
+  });
+  grid.querySelectorAll('img').forEach(img=>{
+    img.addEventListener('click', e=> openLightbox(parseInt(e.target.dataset.idx)));
+  });
+}
+
+const lbEl = document.getElementById('lightbox');
+const lbImg = document.getElementById('lbImg');
+const lbTitle = document.getElementById('lbTitle');
+const lbSelect = document.getElementById('lbSelect');
+lbSelect.innerHTML = TYPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('');
+
+async function openLightbox(pageIndex){
+  lbIndex = pageIndex;
+  lbEl.classList.remove('hidden');
+  await renderLightbox();
+}
+async function renderLightbox(){
+  const p = pages.find(p=>p.index===lbIndex);
+  lbTitle.textContent = `Page ${p.index} of ${pages.length}`;
+  lbSelect.value = p.type;
+  lbImg.src = p.dataUrl;
+  // re-render at higher resolution for a sharper full view
+  try{
+    const page = await pdfDocRef.getPage(p.index);
+    const viewport = page.getViewport({scale: 2.2});
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+    lbImg.src = canvas.toDataURL('image/jpeg', 0.85);
+  }catch(e){ /* fall back to the thumbnail already set */ }
+}
+function closeLightbox(){ lbEl.classList.add('hidden'); renderGrid(); }
+document.getElementById('lbClose').addEventListener('click', closeLightbox);
+lbEl.addEventListener('click', e=>{ if(e.target===lbEl) closeLightbox(); });
+document.getElementById('lbPrev').addEventListener('click', ()=>{
+  const i = pages.findIndex(p=>p.index===lbIndex);
+  if(i>0){ lbIndex = pages[i-1].index; renderLightbox(); }
+});
+document.getElementById('lbNext').addEventListener('click', ()=>{
+  const i = pages.findIndex(p=>p.index===lbIndex);
+  if(i<pages.length-1){ lbIndex = pages[i+1].index; renderLightbox(); }
+});
+lbSelect.addEventListener('change', e=>{
+  pages.find(p=>p.index===lbIndex).type = e.target.value;
+});
+document.addEventListener('keydown', e=>{
+  if(lbEl.classList.contains('hidden')) return;
+  if(e.key==='Escape') closeLightbox();
+  if(e.key==='ArrowLeft') document.getElementById('lbPrev').click();
+  if(e.key==='ArrowRight') document.getElementById('lbNext').click();
+});
+
+document.getElementById('groupBtn').addEventListener('click', buildGroups);
+
+async function buildGroups(){
+  const groups = [];
+  pages.forEach(p=>{
+    const last = groups[groups.length-1];
+    if (last && last.type === p.type) last.pageIndexes.push(p.index);
+    else groups.push({type:p.type, pageIndexes:[p.index]});
+  });
+  const docsEl = document.getElementById('docs');
+  docsEl.innerHTML = '';
+  let downloadsNs = null, dlErr = null;
+  try{ downloadsNs = await claude.use('downloads'); }catch(e){ dlErr = e; }
+  if(!downloadsNs){
+    const warn = document.createElement('p');
+    warn.className = 'status';
+    warn.style.color = 'var(--warn)';
+    warn.textContent = "Saving isn't available in this preview. Open this artifact by its own link (not embedded in chat) and try again.";
+    docsEl.appendChild(warn);
+  }
+  for (const g of groups){
+    const label = TYPES.find(t=>t[0]===g.type)?.[1] || g.type;
+    const row = document.createElement('div');
+    row.className = 'doc';
+    row.innerHTML = `<div class="meta"><b>${label}</b><span>Page${g.pageIndexes.length>1?'s':''} ${g.pageIndexes.join(', ')}</span><span class="errmsg" style="color:var(--warn)"></span></div>`;
+    const btn = document.createElement('button');
+    btn.textContent = 'Download PDF';
+    if(!downloadsNs){ btn.disabled = true; btn.title = 'Downloads not available in this view'; }
+    const errEl = row.querySelector('.errmsg');
+    btn.addEventListener('click', async ()=>{
+      btn.disabled = true; btn.textContent = 'Preparing…'; errEl.textContent = '';
+      try{
+        const src = await PDFDocument.load(rawBytes.slice(0));
+        const out = await PDFDocument.create();
+        const copied = await out.copyPages(src, g.pageIndexes.map(n=>n-1));
+        copied.forEach(pg=>out.addPage(pg));
+        const bytes = await out.save();
+        const filename = label.replace(/[^\w\-]+/g,'_') + '.pdf';
+        await downloadsNs.save({filename, data: new Blob([bytes], {type:'application/pdf'})});
+        btn.textContent = 'Saved ✓';
+      }catch(err){
+        btn.textContent = 'Failed — retry';
+        btn.disabled = false;
+        errEl.textContent = (err && (err.message || err.code)) ? String(err.message || err.code) : 'Unknown error';
+      }
+    });
+    row.appendChild(btn);
+    docsEl.appendChild(row);
+  }
+  document.getElementById('docsCard').classList.remove('hidden');
+  document.getElementById('docsCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+</script>
+</body>
+</html>
