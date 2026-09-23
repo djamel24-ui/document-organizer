@@ -6,6 +6,7 @@
 <title>Scan Your PDF</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
   --bg:#f7f6f3; --card:#ffffff; --ink:#1c1a17; --sub:#6b6559; --line:#e6e2da;
@@ -91,8 +92,11 @@ select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--lin
   </div>
 
   <div class="card hidden" id="docsCard">
-    <b>Ready to download</b>
-    <p class="status">Each row below combines every page you labeled the same type — download the ones you need.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <b>Ready to download</b>
+      <button id="downloadAllBtn">⬇ Download all (.zip)</button>
+    </div>
+    <p class="status">Each row below combines every page you labeled the same type — download the ones you need, or grab them all as one zip.</p>
     <div class="docs" id="docs"></div>
   </div>
 </div>
@@ -279,15 +283,30 @@ async function buildGroups(){
   const groups = Array.from(byType.entries()).map(([type,pageIndexes])=>({type,pageIndexes}));
   const docsEl = document.getElementById('docs');
   docsEl.innerHTML = '';
-  let downloadsNs = null, dlErr = null;
-  try{ downloadsNs = await claude.use('downloads'); }catch(e){ dlErr = e; }
-  if(!downloadsNs){
-    const warn = document.createElement('p');
-    warn.className = 'status';
-    warn.style.color = 'var(--warn)';
-    warn.textContent = "Saving isn't available in this preview. Open this artifact by its own link (not embedded in chat) and try again.";
-    docsEl.appendChild(warn);
+
+  function triggerDownload(filename, bytes){
+    const blob = new Blob([bytes], {type:'application/pdf'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
   }
+
+  async function buildGroupPdf(g){
+    const label = TYPES.find(t=>t[0]===g.type)?.[1] || g.type;
+    const src = await PDFDocument.load(rawBytes.slice(0));
+    const out = await PDFDocument.create();
+    const copied = await out.copyPages(src, g.pageIndexes.map(n=>n-1));
+    copied.forEach(pg=>out.addPage(pg));
+    const bytes = await out.save();
+    const filename = label.replace(/[^\w\-]+/g,'_') + '.pdf';
+    return {filename, bytes};
+  }
+
   for (const g of groups){
     const label = TYPES.find(t=>t[0]===g.type)?.[1] || g.type;
     const row = document.createElement('div');
@@ -295,19 +314,14 @@ async function buildGroups(){
     row.innerHTML = `<div class="meta"><b>${label}</b><span>Page${g.pageIndexes.length>1?'s':''} ${g.pageIndexes.join(', ')}</span><span class="errmsg" style="color:var(--warn)"></span></div>`;
     const btn = document.createElement('button');
     btn.textContent = 'Download PDF';
-    if(!downloadsNs){ btn.disabled = true; btn.title = 'Downloads not available in this view'; }
     const errEl = row.querySelector('.errmsg');
     btn.addEventListener('click', async ()=>{
       btn.disabled = true; btn.textContent = 'Preparing…'; errEl.textContent = '';
       try{
-        const src = await PDFDocument.load(rawBytes.slice(0));
-        const out = await PDFDocument.create();
-        const copied = await out.copyPages(src, g.pageIndexes.map(n=>n-1));
-        copied.forEach(pg=>out.addPage(pg));
-        const bytes = await out.save();
-        const filename = label.replace(/[^\w\-]+/g,'_') + '.pdf';
-        await downloadsNs.save({filename, data: new Blob([bytes], {type:'application/pdf'})});
+        const {filename, bytes} = await buildGroupPdf(g);
+        triggerDownload(filename, bytes);
         btn.textContent = 'Saved ✓';
+        setTimeout(()=>{ btn.disabled = false; btn.textContent = 'Download PDF'; }, 1500);
       }catch(err){
         btn.textContent = 'Failed — retry';
         btn.disabled = false;
@@ -317,6 +331,45 @@ async function buildGroups(){
     row.appendChild(btn);
     docsEl.appendChild(row);
   }
+
+  const allBtn = document.getElementById('downloadAllBtn');
+  allBtn.disabled = groups.length === 0;
+  allBtn.onclick = async ()=>{
+    allBtn.disabled = true;
+    const origText = allBtn.textContent;
+    allBtn.textContent = 'Zipping…';
+    try{
+      const zip = new JSZip();
+      const usedNames = new Map();
+      for (const g of groups){
+        const {filename, bytes} = await buildGroupPdf(g);
+        let finalName = filename;
+        if (usedNames.has(filename)){
+          const n = usedNames.get(filename) + 1;
+          usedNames.set(filename, n);
+          finalName = filename.replace(/\.pdf$/, `_${n}.pdf`);
+        } else {
+          usedNames.set(filename, 0);
+        }
+        zip.file(finalName, bytes);
+      }
+      const zipBytes = await zip.generateAsync({type:'blob'});
+      const url = URL.createObjectURL(zipBytes);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Scanned_Documents.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      allBtn.textContent = 'Saved ✓';
+      setTimeout(()=>{ allBtn.disabled = false; allBtn.textContent = origText; }, 1500);
+    }catch(err){
+      allBtn.textContent = 'Failed — retry';
+      allBtn.disabled = false;
+    }
+  };
+
   document.getElementById('docsCard').classList.remove('hidden');
   document.getElementById('docsCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
