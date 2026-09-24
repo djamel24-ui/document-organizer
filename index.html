@@ -3,87 +3,117 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Scan Your PDF</title>
+<title>Scan Your Documents</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 :root{
   --bg:#f7f6f3; --card:#ffffff; --ink:#1c1a17; --sub:#6b6559; --line:#e6e2da;
   --accent:#8a1f1f; --accent2:#c9a15a; --ok:#2f6b3f; --warn:#b5762b;
-  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
-  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); box-sizing:border-box;
 }
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){ --bg:#161412; --card:#211e1a; --ink:#f2efe9; --sub:#a89f8f; --line:#38332c; }
-}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#161412; --card:#211e1a; --ink:#f2efe9; --sub:#a89f8f; --line:#38332c; } }
 :root[data-theme="dark"]{ --bg:#161412; --card:#211e1a; --ink:#f2efe9; --sub:#a89f8f; --line:#38332c; }
-*{box-sizing:border-box}
-html,body{height:100%}
+*{box-sizing:border-box} html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,sans-serif;}
-.wrap{max-width:900px;margin:0 auto;padding:28px 20px 60px;}
-h1{font-size:1.5rem;margin:0 0 4px;}
-p.lead{color:var(--sub);margin:0 0 22px;font-size:.95rem;line-height:1.5}
+.wrap{max-width:960px;margin:0 auto;padding:28px 20px 60px;}
+h1{font-size:1.4rem;margin:0 0 4px;} h2{font-size:1.05rem;margin:0 0 6px;}
+p.lead{color:var(--sub);margin:0 0 20px;font-size:.92rem;line-height:1.5}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;}
-.dropzone{border:2px dashed var(--line);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:.15s}
-.dropzone:hover{border-color:var(--accent2)}
+.dropzone{border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;cursor:pointer;}
 .dropzone input{display:none}
-button{font:inherit;border:none;border-radius:9px;padding:9px 16px;cursor:pointer;background:var(--accent);color:#fff;}
+button{font:inherit;border:none;border-radius:9px;padding:9px 15px;cursor:pointer;background:var(--accent);color:#fff;}
 button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+button.small{padding:5px 10px;font-size:.82rem;}
 button:disabled{opacity:.5;cursor:default}
-select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);max-width:100%;}
-.status{font-size:.85rem;color:var(--sub);margin-top:10px;min-height:1.2em}
+select,input[type=text]{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--card);color:var(--ink);}
+.status{font-size:.85rem;color:var(--sub);margin-top:8px;min-height:1.2em}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;margin-top:14px;}
-.pg{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:.78rem;}
-.pg canvas{width:100%;border-radius:6px;border:1px solid var(--line);display:block;margin-bottom:6px;}
-.pg .num{color:var(--sub);font-size:.72rem;margin-bottom:4px;}
-.tag{display:inline-block;font-size:.68rem;padding:2px 6px;border-radius:5px;margin-bottom:5px;color:#fff;}
-.tag.ok{background:var(--ok)} .tag.warn{background:var(--warn)}
+.pg{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:.76rem;position:relative;}
+.pg img,.pg .txtcard{width:100%;border-radius:6px;border:1px solid var(--line);display:block;margin-bottom:6px;cursor:zoom-in;}
+.pg .txtcard{height:96px;overflow:hidden;padding:6px;background:var(--card);font-size:.62rem;line-height:1.3;color:var(--sub);}
+.pg .num{color:var(--sub);font-size:.7rem;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;}
+.pg .num input{width:15px;height:15px;}
+.tag{display:inline-block;font-size:.66rem;padding:2px 6px;border-radius:5px;margin-bottom:5px;color:#fff;}
+.tag.ok{background:var(--ok)} .tag.warn{background:var(--warn)} .tag.man{background:#3a6ea5}
+.bulkbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:9px;}
+.bulkbar select{flex:1;min-width:200px}
 .docs{margin-top:14px;display:flex;flex-direction:column;gap:10px;}
 .doc{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);flex-wrap:wrap}
-.doc .meta{flex:1;min-width:180px}
-.doc .meta b{font-size:.92rem}
-.doc .meta span{display:block;color:var(--sub);font-size:.78rem;margin-top:2px}
+.doc .meta{flex:1;min-width:180px} .doc .meta b{font-size:.9rem} .doc .meta span{display:block;color:var(--sub);font-size:.76rem;margin-top:2px}
+.errmsg{color:var(--warn)}
 .hidden{display:none !important}
 .bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:10px}
 .bar>i{display:block;height:100%;background:var(--accent);width:0%;transition:.2s}
-.pg img{cursor:zoom-in}
 .note{font-size:.82rem;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:10px;color:var(--sub);line-height:1.5}
-.lb{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));}
-.lb img{max-width:92vw;max-height:66vh;border-radius:8px;background:#fff;}
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));}
+.lb .lbImgWrap{max-width:92vw;max-height:60vh;overflow:auto;display:flex;align-items:center;justify-content:center;}
+.lb img{max-width:92vw;max-height:60vh;border-radius:8px;background:#fff;transition:transform .12s ease;}
+.lb .lbImgWrap img{max-width:none;max-height:none;}
+.lb pre{max-width:92vw;max-height:60vh;overflow:auto;background:#fff;color:#111;padding:16px;border-radius:8px;white-space:pre-wrap;font-size:.8rem;transition:transform .12s ease;transform-origin:top center;}
 .lb .lbTop{width:100%;max-width:640px;display:flex;justify-content:space-between;align-items:center;color:#fff;margin-bottom:10px;font-size:.9rem}
 .lb .lbTop button{background:transparent;border:1px solid #fff;color:#fff;padding:5px 10px;}
 .lb .lbNav{display:flex;gap:14px;align-items:center;margin-top:14px;width:100%;max-width:640px;justify-content:center;flex-wrap:wrap}
 .lb select{min-width:220px}
-.lb.hidden{display:none}
+.lbTools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
+.lbTools button{padding:5px 10px;font-size:.8rem}
+.checklist{list-style:none;padding:0;margin:8px 0 0;} .checklist li{padding:4px 0;font-size:.88rem;}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px;}
+.field{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;}
+.field b{display:block;font-size:.72rem;color:var(--sub);text-transform:uppercase;letter-spacing:.03em;}
+.field span{font-size:.9rem;}
+.toprow{display:flex;gap:16px;flex-wrap:wrap;align-items:center;}
+label.chk{display:flex;align-items:center;gap:6px;font-size:.88rem;}
 </style>
 </head>
 <body>
+<div id="crashBanner" style="display:none;position:sticky;top:0;z-index:99;background:#8a1f1f;color:#fff;padding:10px 16px;font-size:.85rem;"></div>
 <div class="wrap">
-  <h1>Scan Your PDF</h1>
-  <p class="lead">Upload one multi-page PDF containing several documents (passport, certificates, transcripts, English proof, etc). Pages with readable text are labeled automatically; tap any thumbnail to view it full-size and confirm or fix the label. Nothing is split or downloaded until you group and confirm.</p>
+  <h1>Scan Your Documents</h1>
+  <p class="lead">Upload one or more files — PDFs, Word documents, images, or a mix — and this sorts every page into the right document type, lets you fix anything by hand (one at a time or in bulk), then shows what's missing and pulls out key details automatically where the text is readable.</p>
 
   <div class="card">
     <div class="dropzone" id="drop">
-      <input type="file" id="file" accept="application/pdf">
-      <div id="dzLabel">📄 Click to choose a PDF, or drag one here</div>
+      <input type="file" id="file" multiple accept=".pdf,.docx,.jpg,.jpeg,.png">
+      <div id="dzLabel">📄 Click to choose files, or drag them here — PDF, Word, JPG, PNG, any mix</div>
     </div>
     <div class="status" id="status"></div>
+    <p class="status" id="capStatus">Checking saving availability…</p>
     <div class="bar hidden" id="barWrap"><i id="bar"></i></div>
   </div>
 
   <div class="card hidden" id="pagesCard">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div class="toprow" style="justify-content:space-between;">
       <b>Detected pages — fix any label, then group</b>
       <button id="groupBtn">Group into documents →</button>
     </div>
+    <div class="bulkbar">
+      <button class="small secondary" id="selAll">Select all</button>
+      <button class="small secondary" id="selClear">Clear</button>
+      <select id="bulkType"></select>
+      <button class="small" id="bulkApply">Assign selected →</button>
+    </div>
     <div class="grid" id="grid"></div>
     <div class="note" id="ocrNote"></div>
+    <button class="secondary hidden" id="runOcrBtn" style="margin-top:10px;">🔎 Try to read unclear pages (OCR — English / Arabic / Chinese)</button>
   </div>
 
   <div class="lb hidden" id="lightbox">
     <div class="lbTop"><span id="lbTitle"></span><button id="lbClose">Close ✕</button></div>
-    <img id="lbImg">
+    <div class="lbTools">
+      <button id="lbRotL" class="secondary" style="color:#fff;border-color:#fff" title="Rotate left — try this if the page looks sideways or upside down">⟲ Rotate</button>
+      <button id="lbRotR" class="secondary" style="color:#fff;border-color:#fff" title="Rotate right">Rotate ⟳</button>
+      <button id="lbZoomOut" class="secondary" style="color:#fff;border-color:#fff" title="Zoom out">− </button>
+      <span id="lbZoomLbl" style="color:#fff;font-size:.82rem;min-width:42px;text-align:center;">100%</span>
+      <button id="lbZoomIn" class="secondary" style="color:#fff;border-color:#fff" title="Zoom in — try this if the text is too small to read">+</button>
+      <button id="lbZoomReset" class="secondary" style="color:#fff;border-color:#fff">Reset view</button>
+      <button id="lbOcr" class="secondary" style="color:#fff;border-color:#fff" title="Re-reads this page with OCR (English/Arabic/Chinese) and suggests a label">🔎 Read this page</button>
+    </div>
+    <div id="lbBody"></div>
+    <p style="color:#cfcac0;font-size:.78rem;max-width:640px;text-align:center;margin:8px 0 0;">Can't read it? Rotate it the right way up first, then zoom in.</p>
     <div class="lbNav">
       <button id="lbPrev" class="secondary" style="color:#fff;border-color:#fff">← Prev</button>
       <select id="lbSelect"></select>
@@ -92,286 +122,663 @@ select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--lin
   </div>
 
   <div class="card hidden" id="docsCard">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div class="toprow" style="justify-content:space-between;">
       <b>Ready to download</b>
-      <button id="downloadAllBtn">⬇ Download all (.zip)</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button id="zipAllBtn" class="secondary">📁 Download all documents (one folder / ZIP)</button>
+        <button id="combineAllBtn" class="secondary">Combine everything into one PDF</button>
+      </div>
     </div>
-    <p class="status">Each row below combines every page you labeled the same type — download the ones you need, or grab them all as one zip.</p>
+    <p class="status">Each row combines every page you labeled the same type. The ZIP puts every document type in its own PDF inside one downloadable folder.</p>
     <div class="docs" id="docs"></div>
+  </div>
+
+  <div class="card hidden" id="infoCard">
+    <h2>Document info</h2>
+    <div class="toprow">
+      <label>Level:
+        <select id="levelSel"><option value="bachelor">Foundation/Diploma/Bachelor</option><option value="master">Master</option><option value="phd">PhD</option></select>
+      </label>
+      <label class="chk"><input type="checkbox" id="chinaChk"> Chinese national</label>
+      <label class="chk" id="gapWrap"><input type="checkbox" id="gapChk"> Has a study/work gap (adds CV)</label>
+      <label id="modeWrap">Master mode:
+        <select id="modeSel"><option value="coursework">Coursework</option><option value="research">Research</option></select>
+      </label>
+    </div>
+    <b style="display:block;margin-top:10px;">Missing required documents</b>
+    <ul class="checklist" id="missingList"></ul>
+    <b style="display:block;margin-top:14px;">Auto-extracted details</b>
+    <p class="status">Best-effort, from readable text only — always verify before using. Pages with no text layer (pure scans) aren't included.</p>
+    <div class="fields" id="fields"></div>
   </div>
 </div>
 
 <script>
+(function(){
+  const b = document.getElementById('crashBanner');
+  function show(msg){ b.style.display='block'; b.textContent = '⚠ ' + msg; }
+  window.addEventListener('error', e=> show('Script error: ' + (e.error?.message || e.message)));
+  window.addEventListener('unhandledrejection', e=> show('Unhandled error: ' + (e.reason?.message || e.reason)));
+  window.addEventListener('DOMContentLoaded', async ()=>{
+    try{
+      const ok = typeof claude !== 'undefined' && typeof claude.use === 'function';
+      let dl = null;
+      if(ok){ try{ dl = await claude.use('downloads'); }catch(e){} }
+      document.getElementById('capStatus').textContent = dl ? 'Saving: available in this view.' : 'Saving: NOT available in this view — open this artifact by its own link (not embedded/inline) to download files.';
+    }catch(e){ show('Startup check failed: ' + e.message); }
+  });
+})();
+</script>
+<script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-const { PDFDocument } = PDFLib;
+const { PDFDocument, StandardFonts, degrees } = PDFLib;
+
+// Physically rotates raw image bytes (used when building the final PDF), so a page the user
+// rotated in the viewer to read it comes out right-side-up in the downloaded file too.
+async function rotateImageBytes(bytes, mime, rotationDeg){
+  if(!rotationDeg) return {bytes, mime};
+  const blob = new Blob([bytes], {type:mime});
+  const bitmap = await createImageBitmap(blob);
+  const swapped = (rotationDeg===90 || rotationDeg===270);
+  const canvas = document.createElement('canvas');
+  canvas.width = swapped ? bitmap.height : bitmap.width;
+  canvas.height = swapped ? bitmap.width : bitmap.height;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.rotate(rotationDeg*Math.PI/180);
+  ctx.drawImage(bitmap, -bitmap.width/2, -bitmap.height/2);
+  const outMime = mime==='image/png' ? 'image/png' : 'image/jpeg';
+  const outBlob = await new Promise(res=>canvas.toBlob(res, outMime, 0.92));
+  return {bytes: await outBlob.arrayBuffer(), mime: outMime};
+}
 
 const TYPES = [
-  ["passport_front","Passport"],
-  ["photo_white_bg","Photo (white background)"],
-  ["highschool_cert_english","High school certificate (English)"],
-  ["highschool_cert_original","High school certificate (original language)"],
-  ["highschool_transcript_english","High school transcript (English)"],
-  ["highschool_transcript_original","High school transcript (original language)"],
-  ["bachelor_cert_english","Bachelor certificate (English)"],
-  ["bachelor_cert_original","Bachelor certificate (original language)"],
-  ["bachelor_transcript_english","Bachelor transcript (English)"],
-  ["bachelor_transcript_original","Bachelor transcript (original language)"],
-  ["master_cert_english","Master certificate (English)"],
-  ["master_cert_original","Master certificate (original language)"],
-  ["master_transcript_english","Master transcript (English)"],
-  ["master_transcript_original","Master transcript (original language)"],
-  ["english_proof","English proof (IELTS/TOEFL/MUET/MOI)"],
-  ["cv","CV"],
-  ["sponsor_bank_statement","Sponsor letter + bank statement"],
-  ["research_proposal","Research proposal"],
-  ["publications","Publications / conference papers"],
-  ["notarial","Notarial"],
-  ["online_verification","Online Verification"],
-  ["visa_passport_copy","Visa — passport copy"],
+  ["passport_front","Passport"],["photo_white_bg","Passport photo"],
+  ["highschool_cert_english","High school certificate (English)"],["highschool_cert_original","High school certificate (original language)"],
+  ["highschool_transcript_english","High school transcript (English)"],["highschool_transcript_original","High school transcript (original language)"],
+  ["bachelor_cert_english","Bachelor certificate (English)"],["bachelor_cert_original","Bachelor certificate (original language)"],
+  ["bachelor_transcript_english","Bachelor transcript (English)"],["bachelor_transcript_original","Bachelor transcript (original language)"],
+  ["master_cert_english","Master certificate (English)"],["master_cert_original","Master certificate (original language)"],
+  ["master_transcript_english","Master transcript (English)"],["master_transcript_original","Master transcript (original language)"],
+  ["english_proof","English proof (IELTS/TOEFL/MUET/MOI)"],["cv","CV"],["sponsor_bank_statement","Sponsor letter + bank statement"],
+  ["research_proposal","Research proposal"],["publications","Publications / conference papers"],
+  ["notarial","Notarial"],["online_verification","Online Verification"],["visa_passport_copy","Visa — passport copy"],
   ["unsorted","Unsorted / other"]
 ];
+const REQUIRED_CORE = {
+  bachelor: ["passport_front","photo_white_bg","highschool_cert_original","highschool_transcript_original"],
+  master: ["passport_front","photo_white_bg","bachelor_cert_original","bachelor_transcript_original"],
+  phd: ["passport_front","photo_white_bg","bachelor_cert_original","bachelor_transcript_original","master_cert_original","master_transcript_original","research_proposal"]
+};
+// English translations are only needed if the original-language document isn't already in English —
+// listed separately so the checklist can note that instead of flatly demanding both.
+const CONDITIONAL_ENGLISH = {
+  bachelor: ["highschool_cert_english","highschool_transcript_english"],
+  master: ["bachelor_cert_english","bachelor_transcript_english"],
+  phd: ["bachelor_cert_english","bachelor_transcript_english","master_cert_english","master_transcript_english"]
+};
+const CHINA_EXTRA = ["notarial","online_verification"];
+
+// Multilingual keyword sets — English, Arabic (original-language certs from many countries),
+// and Chinese (original-language certs for Chinese nationals). Used both for page classification
+// and for deciding which language a document is in.
+const KW = {
+  bachelor:   { en:/bachelor/i,              ar:/بكالوريوس/,        zh:/学士/ },
+  master:     { en:/master/i,                ar:/ماجستير/,          zh:/硕士/ },
+  highschool: { en:/high school|secondary school/i, ar:/الثانوية العامة|شهادة الثانوية/, zh:/高中|高级中学/ },
+  transcript: { en:/transcript|credit|grade|academic year/i, ar:/كشف الدرجات|السجل الأكاديمي|كشف درجات/, zh:/成绩单|学分|绩点/ },
+  certificate:{ en:/degree|has obtained|notifies hereby|certify|passed successfully|certificate/i, ar:/شهادة|يشهد|حصل على/, zh:/毕业证书|学位证书|证书/ },
+  passport:   { en:/passport|p<[a-z]{3}/i,   ar:/جواز سفر/,         zh:/护照/ },
+  english_proof:{ en:/ielts|toefl|esol|muet|medium of instruction|english language course|preliminary english test/i, ar:/آيلتس|توفل/, zh:/雅思|托福/ },
+  research:   { en:/research proposal/i,     ar:/مقترح بحث|خطة البحث/, zh:/研究计划|开题报告/ },
+  sponsor:    { en:/bank statement|sponsor/i, ar:/كشف حساب|راعي|ضامن/, zh:/银行对账单|担保人/ },
+  cv:         { en:/curriculum vitae|\bcv\b/i, ar:/السيرة الذاتية/, zh:/简历|个人简历/ },
+};
+function anyMatch(field, text){ const k=KW[field]; return k.en.test(text) || k.ar.test(text) || k.zh.test(text); }
 
 function classify(text){
-  const t = text.toLowerCase();
+  const t = text; // keep original casing/script; lowercasing is a no-op for Arabic/Chinese and harmless for English
   const arabicRatio = (text.match(/[\u0600-\u06FF]/g)||[]).length / Math.max(text.length,1);
-  const isOriginalLang = arabicRatio > 0.15 && !/legal translation/i.test(text);
-  if (/passport|p<[a-z]{3}/i.test(t)) return "passport_front";
-  if (/ielts|toefl|esol|muet|medium of instruction|english language course|preliminary english test/.test(t)) return "english_proof";
-  if (/icdl|computer driving licence/.test(t)) return "unsorted";
-  if (/master/.test(t) && /transcript|credit|grade/.test(t)) return isOriginalLang ? "master_transcript_original":"master_transcript_english";
-  if (/master/.test(t) && /degree|has obtained|notifies hereby|certify/.test(t)) return isOriginalLang ? "master_cert_original":"master_cert_english";
-  if (/bachelor/.test(t) && /transcript|credit|grade|academic year/.test(t)) return isOriginalLang ? "bachelor_transcript_original":"bachelor_transcript_english";
-  if (/bachelor/.test(t) && /degree|has obtained|notifies hereby|certify|passed successfully/.test(t)) return isOriginalLang ? "bachelor_cert_original":"bachelor_cert_english";
-  if (/high school|secondary school/.test(t) && /transcript|grade/.test(t)) return isOriginalLang ? "highschool_transcript_original":"highschool_transcript_english";
-  if (/high school|secondary school/.test(t) && /certificate/.test(t)) return isOriginalLang ? "highschool_cert_original":"highschool_cert_english";
-  if (/research proposal/.test(t)) return "research_proposal";
-  if (/bank statement|sponsor/.test(t)) return "sponsor_bank_statement";
-  if (/curriculum vitae|\bcv\b/.test(t)) return "cv";
+  const chineseRatio = (text.match(/[\u4e00-\u9fff]/g)||[]).length / Math.max(text.length,1);
+  const isOrig = (arabicRatio > 0.15 || chineseRatio > 0.15) && !/legal translation|翻译件|ترجمة قانونية/i.test(text);
+  if (anyMatch('passport', t)) return "passport_front";
+  if (anyMatch('english_proof', t)) return "english_proof";
+  if (/icdl|computer driving licence/i.test(t)) return "unsorted";
+  if (anyMatch('master', t) && anyMatch('transcript', t)) return isOrig?"master_transcript_original":"master_transcript_english";
+  if (anyMatch('master', t) && anyMatch('certificate', t)) return isOrig?"master_cert_original":"master_cert_english";
+  if (anyMatch('bachelor', t) && anyMatch('transcript', t)) return isOrig?"bachelor_transcript_original":"bachelor_transcript_english";
+  if (anyMatch('bachelor', t) && anyMatch('certificate', t)) return isOrig?"bachelor_cert_original":"bachelor_cert_english";
+  if (anyMatch('highschool', t) && anyMatch('transcript', t)) return isOrig?"highschool_transcript_original":"highschool_transcript_english";
+  if (anyMatch('highschool', t) && anyMatch('certificate', t)) return isOrig?"highschool_cert_original":"highschool_cert_english";
+  if (anyMatch('research', t)) return "research_proposal";
+  if (anyMatch('sponsor', t)) return "sponsor_bank_statement";
+  if (anyMatch('cv', t)) return "cv";
   return "unsorted";
 }
 
-let pages = []; // {index, canvas(dataURL), text, type, confident}
-let pdfDocRef = null;
-let lbIndex = 0;
+// OCR — for photographed/scanned pages that have no embedded text layer at all.
+// Reads English, Arabic and Chinese (simplified) in one pass. Created lazily (only when actually
+// used) since downloading the language data takes a little while.
+let ocrWorkerPromise = null;
+function getOcrWorker(){
+  if(!ocrWorkerPromise){
+    ocrWorkerPromise = (typeof Tesseract==='undefined')
+      ? Promise.reject(new Error('OCR library did not load'))
+      : Tesseract.createWorker(['eng','ara','chi_sim']).catch(e=>{ ocrWorkerPromise=null; throw e; });
+  }
+  return ocrWorkerPromise;
+}
+async function getOcrSource(p){
+  if(p.kind==='image') return p.dataUrl;
+  if(p.kind==='pdf'){
+    try{
+      const pdf = files[p.fileIdx].pdfDoc;
+      const page = await pdf.getPage(p.pdfPageNum);
+      const viewport = page.getViewport({scale:2.0, rotation:(p.rotation||0)});
+      const canvas = document.createElement('canvas'); canvas.width=viewport.width; canvas.height=viewport.height;
+      await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+      return canvas.toDataURL('image/png');
+    }catch(e){ return p.dataUrl; }
+  }
+  return null; // docx pages are already plain text — nothing to OCR
+}
+async function ocrOnePage(p){
+  const src = await getOcrSource(p);
+  if(!src) return false;
+  const worker = await getOcrWorker();
+  const { data } = await worker.recognize(src);
+  const text = (data.text||'').trim();
+  if(text.length > 10){
+    p.text = text; p.confident = true;
+    if(!p.manual) p.type = classify(text);
+    return true;
+  }
+  return false;
+}
+
+let files = []; // {kind, name, bytes(ArrayBuffer), mime, pdfDoc}
+let pages = []; // {id, fileIdx, kind, pdfPageNum, text, dataUrl, name, type, confident, manual}
+let pageSeq = 0;
+let selected = new Set();
+
+const typeOptsHTML = TYPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('');
+document.getElementById('bulkType').innerHTML = typeOptsHTML;
+document.getElementById('lbSelect').innerHTML = typeOptsHTML;
 
 const fileInput = document.getElementById('file');
 const drop = document.getElementById('drop');
 drop.addEventListener('click', ()=>fileInput.click());
-drop.addEventListener('dragover', e=>{e.preventDefault();});
-drop.addEventListener('drop', e=>{e.preventDefault(); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);});
-fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+drop.addEventListener('dragover', e=>e.preventDefault());
+drop.addEventListener('drop', e=>{ e.preventDefault(); if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e=>{ if(e.target.files.length) handleFiles(e.target.files); });
 
 const statusEl = document.getElementById('status');
 const barWrap = document.getElementById('barWrap');
 const bar = document.getElementById('bar');
-let rawBytes = null;
 
-async function handleFile(file){
-  document.getElementById('dzLabel').textContent = "📄 " + file.name;
-  statusEl.textContent = "Reading PDF…";
-  barWrap.classList.remove('hidden'); bar.style.width='5%';
-  rawBytes = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data: rawBytes.slice(0)}).promise;
-  pdfDocRef = pdf;
-  pages = [];
-  for (let i=1;i<=pdf.numPages;i++){
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({scale: 0.55});
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width; canvas.height = viewport.height;
-    await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
-    const textContent = await page.getTextContent();
-    const text = textContent.items.map(it=>it.str).join(' ');
-    const confident = text.trim().length > 20;
-    const type = confident ? classify(text) : "unsorted";
-    pages.push({index:i, dataUrl: canvas.toDataURL('image/jpeg',0.7), text, type, confident});
-    bar.style.width = (5 + (i/pdf.numPages)*90) + '%';
+async function handleFiles(fileList){
+  document.getElementById('dzLabel').textContent = `📄 ${fileList.length} file(s) selected`;
+  statusEl.textContent = "Reading files…"; barWrap.classList.remove('hidden'); bar.style.width='5%';
+  const list = Array.from(fileList);
+  for (let fi=0; fi<list.length; fi++){
+    const f = list[fi];
+    const ext = f.name.split('.').pop().toLowerCase();
+    const buf = await f.arrayBuffer();
+    if (ext==='pdf'){
+      const fileIdx = files.length;
+      files.push({kind:'pdf', name:f.name, bytes:buf});
+      const pdf = await pdfjsLib.getDocument({data: buf.slice(0)}).promise;
+      files[fileIdx].pdfDoc = pdf;
+      for (let i=1;i<=pdf.numPages;i++){
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({scale:0.55});
+        const canvas = document.createElement('canvas'); canvas.width=viewport.width; canvas.height=viewport.height;
+        await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+        const tc = await page.getTextContent();
+        const text = tc.items.map(it=>it.str).join(' ');
+        const confident = text.trim().length>20;
+        const type = confident ? classify(text+' '+f.name) : classify(f.name);
+        pages.push({id:pageSeq++, fileIdx, kind:'pdf', pdfPageNum:i, text, dataUrl:canvas.toDataURL('image/jpeg',0.7), name:f.name, type, confident, manual:false, rotation:0});
+      }
+    } else if (ext==='jpg'||ext==='jpeg'||ext==='png'){
+      const fileIdx = files.length;
+      files.push({kind:'image', name:f.name, bytes:buf, mime: ext==='png'?'image/png':'image/jpeg'});
+      const dataUrl = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f); });
+      const type = classify(f.name);
+      pages.push({id:pageSeq++, fileIdx, kind:'image', text:'', dataUrl, name:f.name, type, confident:false, manual:false, rotation:0});
+    } else if (ext==='docx'){
+      const fileIdx = files.length;
+      files.push({kind:'docx', name:f.name});
+      let text = '';
+      try{ const r = await mammoth.extractRawText({arrayBuffer:buf}); text = r.value||''; }catch(e){}
+      const confident = text.trim().length>20;
+      const type = confident ? classify(text+' '+f.name) : classify(f.name);
+      pages.push({id:pageSeq++, fileIdx, kind:'docx', text, dataUrl:null, name:f.name, type, confident, manual:false, rotation:0});
+    }
+    bar.style.width = (5 + ((fi+1)/list.length)*90)+'%';
   }
   bar.style.width='100%';
-  const unclear = pages.filter(p=>!p.confident).length;
-  statusEl.textContent = `${pdf.numPages} page(s) read. Review the labels below.`;
-  const noteEl = document.getElementById('ocrNote');
-  if (unclear){
-    noteEl.textContent = `${unclear} page(s) have no readable text layer (photographed/scanned pages, e.g. the passport or stamped certificates) — those are set to "check manually" since this tool can't guess from an image alone here. Tap a thumbnail to view it full-size and pick the right label.`;
-  } else {
-    noteEl.textContent = '';
-  }
+  const unclear = pages.filter(p=>!p.confident && !p.manual);
+  statusEl.textContent = `${pages.length} page(s)/item(s) read across ${files.length} file(s). Review the labels below.`;
+  const ocrBtn = document.getElementById('runOcrBtn');
+  const ocrable = unclear.filter(p=>p.kind!=='docx').length;
+  document.getElementById('ocrNote').textContent = unclear.length ? `${unclear.length} item(s) have no readable text yet (photographed/scanned pages) — set to "check manually". ${ocrable? 'Try the OCR button below to read them, or t':'T'}ap a page to view full-size and pick the right label, or use bulk-assign below.` : '';
+  ocrBtn.classList.toggle('hidden', ocrable===0);
   renderGrid();
   document.getElementById('pagesCard').classList.remove('hidden');
   document.getElementById('docsCard').classList.add('hidden');
-  setTimeout(()=>barWrap.classList.add('hidden'), 600);
+  document.getElementById('infoCard').classList.add('hidden');
+  setTimeout(()=>barWrap.classList.add('hidden'),600);
+}
+
+function tagFor(p){
+  if (p.manual) return `<span class="tag man">confirmed</span>`;
+  if (p.confident) return `<span class="tag ok">auto-detected</span>`;
+  return `<span class="tag warn">check manually</span>`;
 }
 
 function renderGrid(){
   const grid = document.getElementById('grid');
-  grid.innerHTML = '';
+  grid.innerHTML='';
   pages.forEach(p=>{
-    const div = document.createElement('div');
-    div.className = 'pg';
-    const tag = p.confident ? `<span class="tag ok">auto-detected</span>` : `<span class="tag warn">check manually</span>`;
+    const div = document.createElement('div'); div.className='pg';
     const opts = TYPES.map(([id,label])=>`<option value="${id}" ${id===p.type?'selected':''}>${label}</option>`).join('');
-    div.innerHTML = `<div class="num">Page ${p.index}</div><img src="${p.dataUrl}" data-idx="${p.index}" style="width:100%;border-radius:6px;border:1px solid var(--line);margin-bottom:6px;">${tag}<select data-idx="${p.index}">${opts}</select>`;
+    const rot = p.rotation ? ` style="transform:rotate(${p.rotation}deg)"` : '';
+    const media = p.dataUrl ? `<img src="${p.dataUrl}" data-id="${p.id}"${rot}>` : `<div class="txtcard" data-id="${p.id}">${(p.text||'(no readable text)').slice(0,200)}</div>`;
+    div.innerHTML = `<div class="num"><input type="checkbox" data-id="${p.id}" ${selected.has(p.id)?'checked':''}><span>${p.name}</span></div>${media}${tagFor(p)}<select data-id="${p.id}">${opts}</select>`;
     grid.appendChild(div);
   });
-  grid.querySelectorAll('select').forEach(sel=>{
-    sel.addEventListener('change', e=>{
-      const idx = parseInt(e.target.dataset.idx);
-      pages.find(p=>p.index===idx).type = e.target.value;
-      renderGrid();
-    });
-  });
-  grid.querySelectorAll('img').forEach(img=>{
-    img.addEventListener('click', e=> openLightbox(parseInt(e.target.dataset.idx)));
-  });
+  grid.querySelectorAll('select').forEach(sel=>sel.addEventListener('change', e=>{
+    const id = parseInt(e.target.dataset.id);
+    const p = pages.find(p=>p.id===id); p.type = e.target.value; p.manual = true;
+    renderGrid();
+  }));
+  grid.querySelectorAll('.pg img, .pg .txtcard').forEach(el=>el.addEventListener('click', e=>openLightbox(parseInt(e.target.dataset.id))));
+  grid.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change', e=>{
+    const id = parseInt(e.target.dataset.id);
+    if(e.target.checked) selected.add(id); else selected.delete(id);
+  }));
 }
 
-const lbEl = document.getElementById('lightbox');
-const lbImg = document.getElementById('lbImg');
-const lbTitle = document.getElementById('lbTitle');
-const lbSelect = document.getElementById('lbSelect');
-lbSelect.innerHTML = TYPES.map(([id,label])=>`<option value="${id}">${label}</option>`).join('');
+document.getElementById('selAll').addEventListener('click', ()=>{ pages.forEach(p=>selected.add(p.id)); renderGrid(); });
+document.getElementById('selClear').addEventListener('click', ()=>{ selected.clear(); renderGrid(); });
+document.getElementById('bulkApply').addEventListener('click', ()=>{
+  const val = document.getElementById('bulkType').value;
+  if(!selected.size){ return; }
+  pages.forEach(p=>{ if(selected.has(p.id)){ p.type=val; p.manual=true; } });
+  selected.clear(); renderGrid();
+});
 
-async function openLightbox(pageIndex){
-  lbIndex = pageIndex;
-  lbEl.classList.remove('hidden');
-  await renderLightbox();
+document.getElementById('runOcrBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('runOcrBtn'); const orig = btn.textContent;
+  const noteEl = document.getElementById('ocrNote');
+  const targets = pages.filter(p=>!p.confident && !p.manual && p.kind!=='docx');
+  if(!targets.length) return;
+  btn.disabled = true;
+  try{
+    try{ await getOcrWorker(); }
+    catch(e){ noteEl.textContent = "OCR couldn't start in this environment — please label the pages below by hand instead."; return; }
+    let read = 0;
+    for (let i=0;i<targets.length;i++){
+      btn.textContent = `Reading page ${i+1} of ${targets.length}…`;
+      try{ if(await ocrOnePage(targets[i])) read++; }catch(e){ /* skip this page, keep going */ }
+      renderGrid();
+    }
+    const stillUnclear = pages.filter(p=>!p.confident && !p.manual).length;
+    noteEl.textContent = stillUnclear
+      ? `Read ${read} of ${targets.length} page(s). ${stillUnclear} still have no readable text (very low quality scans) — label those by hand below.`
+      : `Read ${read} of ${targets.length} page(s) — review the suggested labels below, then group into documents.`;
+    if(!stillUnclear) btn.classList.add('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+// Lightbox — with rotate (for sideways/upside-down scans) and zoom (for small text)
+const lbEl = document.getElementById('lightbox'), lbBody = document.getElementById('lbBody'), lbTitle = document.getElementById('lbTitle'), lbSelect = document.getElementById('lbSelect');
+const lbZoomLbl = document.getElementById('lbZoomLbl');
+let lbIndex = 0;
+let lbZoom = 1; // resets each time a page is opened; rotation persists on the page itself
+async function openLightbox(id){ lbIndex = id; lbZoom = 1; lbEl.classList.remove('hidden'); await renderLightbox(); }
+function applyLbTransform(){
+  lbZoomLbl.textContent = Math.round(lbZoom*100)+'%';
+  const media = lbBody.querySelector('img, pre');
+  if(media) media.style.transform = `scale(${lbZoom})`;
 }
 async function renderLightbox(){
-  const p = pages.find(p=>p.index===lbIndex);
-  lbTitle.textContent = `Page ${p.index} of ${pages.length}`;
-  lbSelect.value = p.type;
-  lbImg.src = p.dataUrl;
-  // re-render at higher resolution for a sharper full view
-  try{
-    const page = await pdfDocRef.getPage(p.index);
-    const viewport = page.getViewport({scale: 2.2});
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width; canvas.height = viewport.height;
-    await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
-    lbImg.src = canvas.toDataURL('image/jpeg', 0.85);
-  }catch(e){ /* fall back to the thumbnail already set */ }
+  const p = pages.find(p=>p.id===lbIndex);
+  lbTitle.textContent = `${p.name}`; lbSelect.value = p.type; lbBody.innerHTML='';
+  const wrap = document.createElement('div'); wrap.className='lbImgWrap'; lbBody.appendChild(wrap);
+  const rotBtns = [document.getElementById('lbRotL'), document.getElementById('lbRotR'), document.getElementById('lbOcr')];
+  if (p.kind==='docx'){
+    rotBtns.forEach(b=>b.disabled=true);
+    const pre = document.createElement('pre'); pre.textContent = p.text || '(no readable text extracted)'; wrap.appendChild(pre);
+  } else {
+    rotBtns.forEach(b=>b.disabled=false);
+    const img = document.createElement('img'); wrap.appendChild(img);
+    if (p.kind==='pdf'){
+      try{
+        const pdf = files[p.fileIdx].pdfDoc;
+        const page = await pdf.getPage(p.pdfPageNum);
+        // pdf.js renders the rotation directly into the raster, giving a crisp rotated page
+        const viewport = page.getViewport({scale:2.2, rotation:(p.rotation||0)});
+        const canvas = document.createElement('canvas'); canvas.width=viewport.width; canvas.height=viewport.height;
+        await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+        img.src = canvas.toDataURL('image/jpeg',0.85);
+      }catch(e){ img.src = p.dataUrl; }
+    } else {
+      img.src = p.dataUrl;
+      if (p.rotation) img.style.transform = `rotate(${p.rotation}deg)`;
+    }
+  }
+  applyLbTransform();
 }
 function closeLightbox(){ lbEl.classList.add('hidden'); renderGrid(); }
 document.getElementById('lbClose').addEventListener('click', closeLightbox);
 lbEl.addEventListener('click', e=>{ if(e.target===lbEl) closeLightbox(); });
-document.getElementById('lbPrev').addEventListener('click', ()=>{
-  const i = pages.findIndex(p=>p.index===lbIndex);
-  if(i>0){ lbIndex = pages[i-1].index; renderLightbox(); }
+document.getElementById('lbPrev').addEventListener('click', ()=>{ const i=pages.findIndex(p=>p.id===lbIndex); if(i>0){ lbIndex=pages[i-1].id; lbZoom=1; renderLightbox(); } });
+document.getElementById('lbNext').addEventListener('click', ()=>{ const i=pages.findIndex(p=>p.id===lbIndex); if(i<pages.length-1){ lbIndex=pages[i+1].id; lbZoom=1; renderLightbox(); } });
+lbSelect.addEventListener('change', e=>{ const p=pages.find(p=>p.id===lbIndex); p.type=e.target.value; p.manual=true; });
+document.getElementById('lbRotL').addEventListener('click', ()=>{ const p=pages.find(p=>p.id===lbIndex); p.rotation=((p.rotation||0)-90+360)%360; renderLightbox(); });
+document.getElementById('lbRotR').addEventListener('click', ()=>{ const p=pages.find(p=>p.id===lbIndex); p.rotation=((p.rotation||0)+90)%360; renderLightbox(); });
+document.getElementById('lbZoomIn').addEventListener('click', ()=>{ lbZoom = Math.min(4, +(lbZoom+0.25).toFixed(2)); applyLbTransform(); });
+document.getElementById('lbZoomOut').addEventListener('click', ()=>{ lbZoom = Math.max(0.5, +(lbZoom-0.25).toFixed(2)); applyLbTransform(); });
+document.getElementById('lbZoomReset').addEventListener('click', ()=>{ lbZoom = 1; applyLbTransform(); });
+document.getElementById('lbOcr').addEventListener('click', async ()=>{
+  const btn = document.getElementById('lbOcr'); const orig = btn.textContent;
+  const p = pages.find(p=>p.id===lbIndex);
+  if(!p || p.kind==='docx') return;
+  btn.disabled = true; btn.textContent = 'Reading…';
+  try{
+    try{ await getOcrWorker(); }
+    catch(e){ alert("OCR couldn't start in this environment. Please pick the label by hand using the dropdown below."); return; }
+    const found = await ocrOnePage(p);
+    lbSelect.value = p.type;
+    if(!found) alert("Couldn't make out any text on this page — try rotating it first, or label it by hand.");
+  }catch(e){ alert('OCR failed on this page — please label it by hand.'); }
+  finally{ btn.disabled = false; btn.textContent = orig; }
 });
-document.getElementById('lbNext').addEventListener('click', ()=>{
-  const i = pages.findIndex(p=>p.index===lbIndex);
-  if(i<pages.length-1){ lbIndex = pages[i+1].index; renderLightbox(); }
-});
-lbSelect.addEventListener('change', e=>{
-  pages.find(p=>p.index===lbIndex).type = e.target.value;
-});
-document.addEventListener('keydown', e=>{
-  if(lbEl.classList.contains('hidden')) return;
-  if(e.key==='Escape') closeLightbox();
-  if(e.key==='ArrowLeft') document.getElementById('lbPrev').click();
-  if(e.key==='ArrowRight') document.getElementById('lbNext').click();
-});
+document.addEventListener('keydown', e=>{ if(lbEl.classList.contains('hidden')) return; if(e.key==='Escape') closeLightbox(); if(e.key==='ArrowLeft') document.getElementById('lbPrev').click(); if(e.key==='ArrowRight') document.getElementById('lbNext').click(); if(e.key==='+'||e.key==='=') document.getElementById('lbZoomIn').click(); if(e.key==='-'||e.key==='_') document.getElementById('lbZoomOut').click(); if(e.key==='r') document.getElementById('lbRotR').click(); });
 
+// Grouping + downloads
+let currentGroups = [];
 document.getElementById('groupBtn').addEventListener('click', buildGroups);
+
+async function pagesToPdfBytes(pageList){
+  const out = await PDFDocument.create();
+  const cache = {};
+  const font = await out.embedFont(StandardFonts.Helvetica);
+  for (const p of pageList){
+    if (p.kind==='pdf'){
+      if(!cache[p.fileIdx]) cache[p.fileIdx] = await PDFDocument.load(files[p.fileIdx].bytes.slice(0));
+      const [copied] = await out.copyPages(cache[p.fileIdx], [p.pdfPageNum-1]);
+      if (p.rotation){
+        const base = copied.getRotation().angle || 0;
+        copied.setRotation(degrees((base + p.rotation) % 360));
+      }
+      out.addPage(copied);
+    } else if (p.kind==='image'){
+      let bytes = files[p.fileIdx].bytes, mime = files[p.fileIdx].mime;
+      if (p.rotation){ const r = await rotateImageBytes(bytes, mime, p.rotation); bytes = r.bytes; mime = r.mime; }
+      const img = mime==='image/png' ? await out.embedPng(bytes.slice(0)) : await out.embedJpg(bytes.slice(0));
+      const dims = img.scale(1);
+      const page = out.addPage([dims.width, dims.height]);
+      page.drawImage(img, {x:0,y:0,width:dims.width,height:dims.height});
+    } else if (p.kind==='docx'){
+      const margin=40, fontSize=10, maxWidth=595-margin*2;
+      let page = out.addPage([595,842]); let y=842-margin;
+      const words=(p.text||'(no readable text)').split(/\s+/); let line='';
+      for (const w of words){
+        const test = line?line+' '+w:w;
+        if (font.widthOfTextAtSize(test,fontSize) > maxWidth){
+          page.drawText(line,{x:margin,y,size:fontSize,font}); y -= fontSize+4; line=w;
+          if (y<margin){ page = out.addPage([595,842]); y=842-margin; }
+        } else line=test;
+      }
+      if (line) page.drawText(line,{x:margin,y,size:fontSize,font});
+    }
+  }
+  return out.save();
+}
 
 async function buildGroups(){
   const byType = new Map();
-  pages.forEach(p=>{
-    if(!byType.has(p.type)) byType.set(p.type, []);
-    byType.get(p.type).push(p.index);
-  });
-  const groups = Array.from(byType.entries()).map(([type,pageIndexes])=>({type,pageIndexes}));
-  const docsEl = document.getElementById('docs');
-  docsEl.innerHTML = '';
-
-  function triggerDownload(filename, bytes){
-    const blob = new Blob([bytes], {type:'application/pdf'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  pages.forEach(p=>{ if(!byType.has(p.type)) byType.set(p.type,[]); byType.get(p.type).push(p); });
+  currentGroups = Array.from(byType.entries()).map(([type,list])=>({type,list}));
+  const docsEl = document.getElementById('docs'); docsEl.innerHTML='';
+  let downloadsNs=null;
+  try{ downloadsNs = await claude.use('downloads'); }catch(e){}
+  if(!downloadsNs){
+    const warn=document.createElement('p'); warn.className='status'; warn.style.color='var(--warn)';
+    warn.textContent="Saving isn't available in this preview. Open this artifact by its own link (not embedded in chat) and try again.";
+    docsEl.appendChild(warn);
   }
-
-  async function buildGroupPdf(g){
+  for (const g of currentGroups){
     const label = TYPES.find(t=>t[0]===g.type)?.[1] || g.type;
-    const src = await PDFDocument.load(rawBytes.slice(0));
-    const out = await PDFDocument.create();
-    const copied = await out.copyPages(src, g.pageIndexes.map(n=>n-1));
-    copied.forEach(pg=>out.addPage(pg));
-    const bytes = await out.save();
-    const filename = label.replace(/[^\w\-]+/g,'_') + '.pdf';
-    return {filename, bytes};
-  }
-
-  for (const g of groups){
-    const label = TYPES.find(t=>t[0]===g.type)?.[1] || g.type;
-    const row = document.createElement('div');
-    row.className = 'doc';
-    row.innerHTML = `<div class="meta"><b>${label}</b><span>Page${g.pageIndexes.length>1?'s':''} ${g.pageIndexes.join(', ')}</span><span class="errmsg" style="color:var(--warn)"></span></div>`;
-    const btn = document.createElement('button');
-    btn.textContent = 'Download PDF';
+    const row = document.createElement('div'); row.className='doc';
+    row.innerHTML = `<div class="meta"><b>${label}</b><span>${g.list.length} item(s)</span><span class="errmsg"></span></div>`;
+    const btn = document.createElement('button'); btn.textContent='Download PDF';
+    if(!downloadsNs){ btn.disabled=true; btn.title='Downloads not available in this view'; }
     const errEl = row.querySelector('.errmsg');
     btn.addEventListener('click', async ()=>{
-      btn.disabled = true; btn.textContent = 'Preparing…'; errEl.textContent = '';
+      btn.disabled=true; btn.textContent='Preparing…'; errEl.textContent='';
       try{
-        const {filename, bytes} = await buildGroupPdf(g);
-        triggerDownload(filename, bytes);
-        btn.textContent = 'Saved ✓';
-        setTimeout(()=>{ btn.disabled = false; btn.textContent = 'Download PDF'; }, 1500);
-      }catch(err){
-        btn.textContent = 'Failed — retry';
-        btn.disabled = false;
-        errEl.textContent = (err && (err.message || err.code)) ? String(err.message || err.code) : 'Unknown error';
-      }
+        const bytes = await pagesToPdfBytes(g.list);
+        const filename = label.replace(/[^\w\-]+/g,'_')+'.pdf';
+        await downloadsNs.save({filename, data:new Blob([bytes],{type:'application/pdf'})});
+        btn.textContent='Saved ✓';
+      }catch(err){ btn.textContent='Failed — retry'; btn.disabled=false; errEl.textContent = (err&&(err.message||err.code))||'Unknown error'; }
     });
-    row.appendChild(btn);
-    docsEl.appendChild(row);
+    row.appendChild(btn); docsEl.appendChild(row);
+  }
+  document.getElementById('docsCard').classList.remove('hidden');
+  renderInfoCard();
+  document.getElementById('infoCard').classList.remove('hidden');
+  document.getElementById('docsCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+document.getElementById('combineAllBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('combineAllBtn');
+  btn.disabled=true; const orig=btn.textContent; btn.textContent='Preparing…';
+  try{
+    let downloadsNs = await claude.use('downloads');
+    const bytes = await pagesToPdfBytes(pages);
+    await downloadsNs.save({filename:'combined-documents.pdf', data:new Blob([bytes],{type:'application/pdf'})});
+    btn.textContent='Saved ✓';
+  }catch(err){ btn.textContent='Failed — retry'; }
+  finally{ btn.disabled=false; setTimeout(()=>btn.textContent=orig,2000); }
+});
+
+// Download every document type as its own PDF, all bundled into one ZIP ("folder")
+document.getElementById('zipAllBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('zipAllBtn');
+  btn.disabled=true; const orig=btn.textContent;
+  try{
+    const downloadsNs = await claude.use('downloads');
+    if(!downloadsNs) throw new Error("Saving isn't available in this view — open this artifact by its own link and try again.");
+    const zip = new JSZip();
+    for (const g of currentGroups){
+      if(!g.list.length) continue;
+      const label = TYPES.find(t=>t[0]===g.type)?.[1] || g.type;
+      btn.textContent = `Preparing ${label}…`;
+      const bytes = await pagesToPdfBytes(g.list);
+      zip.file(label.replace(/[^\w\-]+/g,'_')+'.pdf', bytes);
+    }
+    btn.textContent='Zipping…';
+    const blob = await zip.generateAsync({type:'blob'});
+    await downloadsNs.save({filename:'all-documents.zip', data: blob});
+    btn.textContent='Saved ✓';
+  }catch(err){ btn.textContent='Failed — retry'; alert((err&&err.message)||'Could not build the ZIP.'); }
+  finally{ btn.disabled=false; setTimeout(()=>btn.textContent=orig,2500); }
+});
+
+// Info panel: missing docs + field extraction
+document.getElementById('levelSel').addEventListener('change', ()=>{ syncControls(); renderInfoCard(); });
+document.getElementById('chinaChk').addEventListener('change', renderInfoCard);
+document.getElementById('gapChk').addEventListener('change', renderInfoCard);
+document.getElementById('modeSel').addEventListener('change', renderInfoCard);
+function syncControls(){
+  const level = document.getElementById('levelSel').value;
+  document.getElementById('gapWrap').style.display = (level==='phd') ? 'none' : 'flex';
+  document.getElementById('modeWrap').style.display = (level==='master') ? 'inline' : 'none';
+}
+syncControls();
+
+function renderInfoCard(){
+  const level = document.getElementById('levelSel').value;
+  const china = document.getElementById('chinaChk').checked;
+  const gap = document.getElementById('gapChk').checked;
+  const mode = document.getElementById('modeSel').value;
+  let required = REQUIRED_CORE[level].concat(china?CHINA_EXTRA:[]);
+  if (level!=='phd' && gap) required = required.concat(['cv']);
+  if (level==='master' && mode==='research') required = required.concat(['research_proposal']);
+  const conditional = CONDITIONAL_ENGLISH[level];
+  const present = new Set(currentGroups.filter(g=>g.list.length).map(g=>g.type));
+  const ml = document.getElementById('missingList'); ml.innerHTML='';
+  required.forEach(id=>{
+    const label = TYPES.find(t=>t[0]===id)?.[1]||id;
+    const li = document.createElement('li');
+    li.textContent = (present.has(id)?'✅ ':'❌ ') + label;
+    if(!present.has(id)) li.style.color='var(--warn)';
+    ml.appendChild(li);
+  });
+  conditional.forEach(id=>{
+    const label = TYPES.find(t=>t[0]===id)?.[1]||id;
+    const li = document.createElement('li');
+    li.textContent = (present.has(id)?'✅ ':'⚠ ') + label + ' — only needed if the original-language document isn\'t already in English';
+    li.style.color = present.has(id) ? '' : 'var(--sub)';
+    ml.appendChild(li);
+  });
+
+  const allText = pages.map(p=>p.text||'').join('\n');
+  // Scope passport fields to pages actually labeled as the passport, and transcript fields to
+  // pages labeled as a transcript — falls back to everything if nothing's been labeled that way yet.
+  const passportText = pages.filter(p=>p.type==='passport_front').map(p=>p.text||'').join('\n') || allText;
+  const transcriptText = pages.filter(p=>/transcript/.test(p.type)).map(p=>p.text||'').join('\n') || allText;
+  const fields = {};
+
+  // ---- Passport / identity details (name, passport no., DOB, nationality, sex, dates) ----
+  // Try the printed machine-readable zone first (two MRZ lines) — most reliable when present.
+  (function mrz(){
+    const compact = passportText.replace(/[\s]/g,'');
+    const m1 = compact.match(/P[<K]([A-Z]{3})([A-Z<]{2,39})/);
+    const m2 = compact.match(/([A-Z0-9<]{9})[0-9]([A-Z]{3})(\d{6})[0-9]([MFX<])(\d{6})[0-9]/);
+    if (m1){
+      const names = m1[2].split('<<').filter(Boolean);
+      if(names.length){
+        const surname = names[0].replace(/</g,' ').trim();
+        const given = (names[1]||'').replace(/</g,' ').trim();
+        if(surname||given) fields['Full name'] = [given,surname].filter(Boolean).join(' ');
+      }
+      if(!fields['Nationality']) fields['Nationality'] = m1[1];
+    }
+    if (m2){
+      const passNo = m2[1].replace(/</g,'').trim();
+      if(passNo) fields['Passport number'] = passNo;
+      if(!fields['Nationality']) fields['Nationality'] = m2[2];
+      const dob = m2[3], yy=parseInt(dob.slice(0,2)), mo=dob.slice(2,4), da=dob.slice(4,6);
+      const dobYear = yy < 30 ? 2000+yy : 1900+yy; // heuristic century pivot for 2-digit MRZ years
+      fields['Date of birth'] = `${da}/${mo}/${dobYear}`;
+      fields['Sex'] = m2[4]==='M'?'Male':(m2[4]==='F'?'Female':m2[4]);
+      const exp = m2[5], eyy=parseInt(exp.slice(0,2)), emo=exp.slice(2,4), eda=exp.slice(4,6);
+      const expYear = 2000+eyy;
+      const d = new Date(expYear, parseInt(emo)-1, parseInt(eda));
+      fields['Passport expiry'] = `${eda}/${emo}/${expYear}`;
+      fields['Passport valid?'] = d > new Date() ? `Valid (until ${eda}/${emo}/${expYear})` : `Expired (${eda}/${emo}/${expYear})`;
+    }
+  })();
+
+  let m;
+  if(!fields['Passport number']){
+    m = passportText.match(/passport\s*no\.?\s*[:\-]?\s*([A-Z0-9]{6,9})/i)
+      || passportText.match(/رقم\s*ال?جواز\s*(?:السفر)?\s*[:\-]?\s*([A-Za-z0-9]{6,12})/)
+      || passportText.match(/护照号码?\s*[:：]?\s*([A-Za-z0-9]{6,12})/);
+    if(m) fields['Passport number']=m[1];
+  }
+  if(!fields['Full name']){
+    m = passportText.match(/given names?\s*[:\-]?\s*([A-Z][A-Za-z .]{2,40})/i); const given = m?m[1].trim():null;
+    m = passportText.match(/surname\s*[:\-]?\s*([A-Z][A-Za-z .]{2,40})/i); const sur = m?m[1].trim():null;
+    if(given||sur) fields['Full name'] = [given,sur].filter(Boolean).join(' ');
+    if(!fields['Full name']){
+      m = passportText.match(/الاسم\s*(?:الكامل)?\s*[:\-]?\s*([\u0600-\u06FF\s]{2,40})/);
+      if(m) fields['Full name'] = m[1].trim();
+    }
+    if(!fields['Full name']){
+      m = passportText.match(/姓名\s*[:：]?\s*([\u4e00-\u9fff·]{2,10})/);
+      if(m) fields['Full name'] = m[1].trim();
+    }
+  }
+  if(!fields['Date of birth']){
+    m = passportText.match(/date of birth\s*[:\-]?\s*(\d{1,2}\D\d{1,2}\D\d{2,4})/i)
+      || passportText.match(/تاريخ\s*الميلاد\s*[:\-]?\s*([\u0660-\u06690-9\/\-\.]{6,12})/)
+      || passportText.match(/出生日期\s*[:：]?\s*([0-9年月日\-\/\.]{6,16})/);
+    if(m) fields['Date of birth']=m[1].trim();
+  }
+  if(!fields['Nationality']){
+    m = passportText.match(/nationality\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,30})/i)
+      || passportText.match(/الجنسية\s*[:\-]?\s*([\u0600-\u06FF\s]{2,20})/)
+      || passportText.match(/国籍\s*[:：]?\s*([\u4e00-\u9fff]{2,10})/);
+    if(m) fields['Nationality']=m[1].trim();
+  }
+  if(!fields['Sex']){
+    m = passportText.match(/\bsex\s*[:\-]?\s*([MF])\b/i) || passportText.match(/gender\s*[:\-]?\s*(male|female)/i);
+    if(m) fields['Sex'] = /^m/i.test(m[1]) ? 'Male' : 'Female';
+    else{
+      m = passportText.match(/الجنس\s*[:\-]?\s*(ذكر|أنثى)/); if(m) fields['Sex']=m[1];
+      else{ m = passportText.match(/性别\s*[:：]?\s*(男|女)/); if(m) fields['Sex']=m[1]; }
+    }
+  }
+  if(!fields['Passport expiry']){
+    m = passportText.match(/date of expiry\D{0,15}(\d{1,2})\D(\d{1,2})\D(\d{4})/i);
+    if(m){
+      const d = new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
+      fields['Passport expiry'] = `${m[1]}/${m[2]}/${m[3]}`;
+      fields['Passport valid?'] = d > new Date() ? `Valid (until ${m[1]}/${m[2]}/${m[3]})` : `Expired (${m[1]}/${m[2]}/${m[3]})`;
+    }
   }
 
-  const allBtn = document.getElementById('downloadAllBtn');
-  allBtn.disabled = groups.length === 0;
-  allBtn.onclick = async ()=>{
-    allBtn.disabled = true;
-    const origText = allBtn.textContent;
-    allBtn.textContent = 'Zipping…';
-    try{
-      const zip = new JSZip();
-      const usedNames = new Map();
-      for (const g of groups){
-        const {filename, bytes} = await buildGroupPdf(g);
-        let finalName = filename;
-        if (usedNames.has(filename)){
-          const n = usedNames.get(filename) + 1;
-          usedNames.set(filename, n);
-          finalName = filename.replace(/\.pdf$/, `_${n}.pdf`);
-        } else {
-          usedNames.set(filename, 0);
-        }
-        zip.file(finalName, bytes);
+  // ---- Transcript / academic details (CGPA, program, school, study period, credit hours) ----
+  m = transcriptText.match(/(?:cgpa|g\.?p\.?a\.?)\D{0,10}(\d(?:\.\d{1,2})?)\b/i)
+    || transcriptText.match(/(?:المعدل\s*التراكمي|المعدل)\D{0,10}(\d{1,3}(?:\.\d+)?)/)
+    || transcriptText.match(/(?:绩点|平均学分绩点)\D{0,10}(\d(?:\.\d{1,2})?)/);
+  if(m) fields['CGPA / GPA (stated)'] = m[1];
+  else{
+    m = transcriptText.match(/(?:percentage|general evaluation)\D{0,10}(\d{1,3}(?:\.\d+)?)\s*%?/i);
+    if(m) fields['Grade / percentage (stated)'] = m[1]+(transcriptText.includes('%')?'%':'');
+  }
+  if(!fields['CGPA / GPA (stated)'] && !fields['Grade / percentage (stated)']){
+    // Nothing explicitly stated — estimate it from the individual grades listed on the transcript.
+    const GRADE_POINTS = {'A+':4.0,'A':4.0,'A-':3.7,'B+':3.3,'B':3.0,'B-':2.7,'C+':2.3,'C':2.0,'C-':1.7,'D+':1.3,'D':1.0,'F':0.0};
+    const letterMatches = [...transcriptText.matchAll(/(?:^|[\s:])([A-D][+\-]?|F)(?=[\s.,\n]|$)/g)].map(mm=>mm[1]);
+    const validLetters = letterMatches.filter(g=>GRADE_POINTS.hasOwnProperty(g));
+    if(validLetters.length >= 3){
+      const avg = validLetters.reduce((s,g)=>s+GRADE_POINTS[g],0)/validLetters.length;
+      fields['CGPA (calculated from listed grades — estimate)'] = avg.toFixed(2)+` (from ${validLetters.length} grades, verify manually)`;
+    } else {
+      const pctMatches = [...transcriptText.matchAll(/\b(\d{2,3})\s*(?:%|\/\s*100)\b/g)].map(mm=>parseInt(mm[1])).filter(n=>n>=30&&n<=100);
+      if(pctMatches.length >= 3){
+        const avg = pctMatches.reduce((s,n)=>s+n,0)/pctMatches.length;
+        fields['Average result (calculated from marks — estimate)'] = avg.toFixed(1)+`% (from ${pctMatches.length} marks, verify manually)`;
       }
-      const zipBytes = await zip.generateAsync({type:'blob'});
-      const url = URL.createObjectURL(zipBytes);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'Scanned_Documents.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url), 1000);
-      allBtn.textContent = 'Saved ✓';
-      setTimeout(()=>{ allBtn.disabled = false; allBtn.textContent = origText; }, 1500);
-    }catch(err){
-      allBtn.textContent = 'Failed — retry';
-      allBtn.disabled = false;
     }
-  };
+  }
+  m = transcriptText.match(/total credit(?:s)? hours?\D{0,10}(\d{2,4})/i)
+    || transcriptText.match(/总学分\D{0,10}(\d{2,4})/)
+    || transcriptText.match(/مجموع\s*الساعات\s*المعتمدة\D{0,10}(\d{2,4})/);
+  if(m) fields['Total credit hours'] = m[1];
 
-  document.getElementById('docsCard').classList.remove('hidden');
-  document.getElementById('docsCard').scrollIntoView({behavior:'smooth', block:'start'});
+  m = allText.match(/(Bachelor|Master|PhD|Doctor)\s+of\s+([A-Za-z &]{2,40})/i); if(m) fields['Program']=`${m[1]} of ${m[2].trim()}`;
+  m = allText.match(/University\s+of\s+([A-Za-z &]{2,40})/i); if(m) fields['School / university']=`University of ${m[1].trim()}`;
+  const years = [...allText.matchAll(/academic year\s*[:\-]?\s*(\d{4})\/(\d{4})/gi)].map(mm=>[parseInt(mm[1]),parseInt(mm[2])]);
+  if(years.length){
+    const start = Math.min(...years.map(y=>y[0])), end = Math.max(...years.map(y=>y[1]));
+    fields['Study period'] = `${start} – ${end}`;
+  }
+
+  const fe = document.getElementById('fields'); fe.innerHTML='';
+  const keys = Object.keys(fields);
+  if(!keys.length){ fe.innerHTML = '<p class="status">Nothing could be auto-extracted from readable text yet.</p>'; }
+  keys.forEach(k=>{ const d=document.createElement('div'); d.className='field'; d.innerHTML=`<b>${k}</b><span>${fields[k]}</span>`; fe.appendChild(d); });
 }
 </script>
 </body>
