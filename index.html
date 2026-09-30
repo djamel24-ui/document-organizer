@@ -81,7 +81,6 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:.88rem;}
       <div id="dzLabel">📄 Click to choose files, or drag them here — PDF, Word, JPG, PNG, any mix</div>
     </div>
     <div class="status" id="status"></div>
-    <p class="status" id="capStatus">Checking saving availability…</p>
     <div class="bar hidden" id="barWrap"><i id="bar"></i></div>
   </div>
 
@@ -147,9 +146,6 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:.88rem;}
     </div>
     <b style="display:block;margin-top:10px;">Missing required documents</b>
     <ul class="checklist" id="missingList"></ul>
-    <b style="display:block;margin-top:14px;">Auto-extracted details</b>
-    <p class="status">Best-effort, from readable text only — always verify before using. Pages with no text layer (pure scans) aren't included.</p>
-    <div class="fields" id="fields"></div>
   </div>
 </div>
 
@@ -159,14 +155,6 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:.88rem;}
   function show(msg){ b.style.display='block'; b.textContent = '⚠ ' + msg; }
   window.addEventListener('error', e=> show('Script error: ' + (e.error?.message || e.message)));
   window.addEventListener('unhandledrejection', e=> show('Unhandled error: ' + (e.reason?.message || e.reason)));
-  window.addEventListener('DOMContentLoaded', async ()=>{
-    try{
-      const ok = typeof claude !== 'undefined' && typeof claude.use === 'function';
-      let dl = null;
-      if(ok){ try{ dl = await claude.use('downloads'); }catch(e){} }
-      document.getElementById('capStatus').textContent = dl ? 'Saving: available in this view.' : 'Saving: NOT available in this view — open this artifact by its own link (not embedded/inline) to download files.';
-    }catch(e){ show('Startup check failed: ' + e.message); }
-  });
 })();
 </script>
 <script>
@@ -237,23 +225,60 @@ const KW = {
 function anyMatch(field, text){ const k=KW[field]; return k.en.test(text) || k.ar.test(text) || k.zh.test(text); }
 
 function classify(text){
-  const t = text; // keep original casing/script; lowercasing is a no-op for Arabic/Chinese and harmless for English
-  const arabicRatio = (text.match(/[\u0600-\u06FF]/g)||[]).length / Math.max(text.length,1);
-  const chineseRatio = (text.match(/[\u4e00-\u9fff]/g)||[]).length / Math.max(text.length,1);
-  const isOrig = (arabicRatio > 0.15 || chineseRatio > 0.15) && !/legal translation|翻译件|ترجمة قانونية/i.test(text);
-  if (anyMatch('passport', t)) return "passport_front";
-  if (anyMatch('english_proof', t)) return "english_proof";
-  if (/icdl|computer driving licence/i.test(t)) return "unsorted";
-  if (anyMatch('master', t) && anyMatch('transcript', t)) return isOrig?"master_transcript_original":"master_transcript_english";
-  if (anyMatch('master', t) && anyMatch('certificate', t)) return isOrig?"master_cert_original":"master_cert_english";
-  if (anyMatch('bachelor', t) && anyMatch('transcript', t)) return isOrig?"bachelor_transcript_original":"bachelor_transcript_english";
-  if (anyMatch('bachelor', t) && anyMatch('certificate', t)) return isOrig?"bachelor_cert_original":"bachelor_cert_english";
-  if (anyMatch('highschool', t) && anyMatch('transcript', t)) return isOrig?"highschool_transcript_original":"highschool_transcript_english";
-  if (anyMatch('highschool', t) && anyMatch('certificate', t)) return isOrig?"highschool_cert_original":"highschool_cert_english";
-  if (anyMatch('research', t)) return "research_proposal";
-  if (anyMatch('sponsor', t)) return "sponsor_bank_statement";
-  if (anyMatch('cv', t)) return "cv";
-  return "unsorted";
+  const t = text || '';
+  const has = re => re.test(t);
+  const count = arr => arr.filter(re=>re.test(t)).length;
+
+  // ---- Language: English text (or a translation stamp) => the "English" copy; otherwise original language ----
+  const latin = (t.match(/[A-Za-z]/g)||[]).length;
+  const nonLatin = (t.match(/[\u0600-\u06FF\u4e00-\u9fff]/g)||[]).length;
+  const translationStamp = has(/translat|translator|sworn|ترجمة|مترجم|翻译|翻譯/i);
+  const isEnglish = translationStamp || latin >= nonLatin;
+  const lang = isEnglish ? 'english' : 'original';
+
+  // ---- Simple one-off documents ----
+  if (has(/ielts|toefl|esol|\bmuet\b|medium of instruction|english language course|preliminary english test|cambridge english|pearson test|duolingo|آيلتس|توفل|雅思|托福/i)) return 'english_proof';
+  if (has(/icdl|computer driving licen[cs]e/i)) return 'unsorted';
+
+  const short = t.length < 250; // filename-only / almost no text
+
+  // ---- Passport photo (only trusted from a filename, since real photos have no text) ----
+  if (short && has(/photo|passport[\s_-]*size|صورة\s*شخصية|白底|证件照/i) && !has(/certificate|transcript/i)) return 'photo_white_bg';
+
+  // ---- Passport: MRZ code (P<XXX... / lines of <<<<), or the word passport backed by passport-style fields ----
+  const compact = t.replace(/\s/g,'');
+  const chevrons = (compact.match(/[<«]/g)||[]).length;
+  const passportMrz = /P[<«][A-Z]{3}/.test(compact) || (chevrons >= 8 && !has(/identity card|national id|بطاقة|居民身份证/i));
+  const passportWord = has(/passport|جواز\s*(?:ال)?سفر|وثيقة\s*سفر|护照/i);
+  const passportFields = count([/date of expiry/i,/place of birth/i,/nationality/i,/surname/i,/given names?/i,/date of issue/i,/issuing authority|authority/i,/الجنسية/,/تاريخ الانتهاء/,/国籍/]);
+  const gradeCues = count([/credit/i,/\bgpa\b|\bcgpa\b/i,/semester/i,/marks?\b/i,/\bgrade/i,/subject/i,/course (?:code|title|name)/i,/المعدل/,/الفصل الدراسي/,/成绩|学分|绩点/]);
+  const transcriptWord = has(/transcript|academic record|statement of marks|mark ?sheet|result card|grade report|كشف\s*(?:ال)?درجات|السجل\s*الأكاديمي|بيان\s*درجات|成绩单|成绩证明/i);
+  const certWord = has(/certificat|certification|diploma|degree|hereby certif|has been awarded|is awarded|has obtained|conferred|شهادة|يشهد|دبلوم|证书|毕业证|学位证|文凭/i);
+  if (passportMrz) return 'passport_front';
+  if (passportWord && !transcriptWord && !certWord && (short || passportFields >= 2)) return 'passport_front';
+
+  // ---- Certificate / transcript, by level ----
+  const isTranscript = transcriptWord || (gradeCues >= 3 && !certWord);
+  const isCert = !isTranscript && certWord;
+  if (isTranscript || isCert){
+    const notDegree = has(/enrol+ment|enrolled|regular student|bona ?fide|good conduct|good standing|clearance|birth certificate|marriage|police|medical|vaccin|attendance|شهادة\s*(?:قيد|ميلاد|حسن)|在读证明|在校证明/i);
+    if (!(isCert && notDegree)){
+      const level = has(/master|postgraduate|\bm\.?sc\b|\bmba\b|ماجستير|硕士|碩士/i) ? 'master'
+                  : has(/bachelor|undergraduate|\bb\.?sc\b|\bllb\b|بكالوريوس|ليسانس|学士/i) ? 'bachelor'
+                  : has(/high school|secondary|matriculation|intermediate|\bssc\b|\bhssc\b|\bgce\b|baccalaur|thanaweya|الثانوية|ثانوية|高中|高级中学/i) ? 'highschool'
+                  : null;
+      if (level) return `${level}_${isTranscript?'transcript':'cert'}_${lang}`;
+    }
+  }
+
+  // ---- Everything else ----
+  if (has(/research proposal|مقترح بحث|خطة البحث|研究计划|开题报告/i)) return 'research_proposal';
+  if (has(/bank statement|account statement|sponsor|كشف\s*حساب|راعي|ضامن|银行对账单|担保人/i)) return 'sponsor_bank_statement';
+  if (has(/curriculum vitae|\bresume\b|\bcv\b|السيرة الذاتية|简历/i)) return 'cv';
+  if (has(/online verification|chsi|verification report|学信网|在线验证/i)) return 'online_verification';
+  if (has(/notar|كاتب العدل|公证/i)) return 'notarial';
+  if (has(/journal|conference|proceedings|\bdoi\b|\bissn\b|\bisbn\b/i)) return 'publications';
+  return 'unsorted';
 }
 
 // OCR — for photographed/scanned pages that have no embedded text layer at all.
@@ -369,6 +394,7 @@ async function handleFiles(fileList){
   document.getElementById('docsCard').classList.add('hidden');
   document.getElementById('infoCard').classList.add('hidden');
   setTimeout(()=>barWrap.classList.add('hidden'),600);
+  if(ocrable>0) runOcrAll(); // auto-read scanned/photographed pages so they get sorted without a click
 }
 
 function tagFor(p){
@@ -409,11 +435,12 @@ document.getElementById('bulkApply').addEventListener('click', ()=>{
   selected.clear(); renderGrid();
 });
 
-document.getElementById('runOcrBtn').addEventListener('click', async ()=>{
+async function runOcrAll(){
   const btn = document.getElementById('runOcrBtn'); const orig = btn.textContent;
   const noteEl = document.getElementById('ocrNote');
   const targets = pages.filter(p=>!p.confident && !p.manual && p.kind!=='docx');
   if(!targets.length) return;
+  noteEl.textContent = 'Reading unclear pages automatically (English / Arabic / Chinese)… the first time it downloads language data, so it may take a minute.';
   btn.disabled = true;
   try{
     try{ await getOcrWorker(); }
@@ -432,7 +459,8 @@ document.getElementById('runOcrBtn').addEventListener('click', async ()=>{
   } finally {
     btn.disabled = false; btn.textContent = orig;
   }
-});
+}
+document.getElementById('runOcrBtn').addEventListener('click', runOcrAll);
 
 // Lightbox — with rotate (for sideways/upside-down scans) and zoom (for small text)
 const lbEl = document.getElementById('lightbox'), lbBody = document.getElementById('lbBody'), lbTitle = document.getElementById('lbTitle'), lbSelect = document.getElementById('lbSelect');
@@ -541,24 +569,30 @@ async function pagesToPdfBytes(pageList){
   return out.save();
 }
 
+
+// Standard browser download (works on any normal website, e.g. Vercel)
+function saveFile(filename, blob){
+  return new Promise(resolve=>{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display='none';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); resolve(); }, 1500);
+  });
+}
+const downloadsShim = { save: ({filename, data}) => saveFile(filename, data) };
+
 async function buildGroups(){
   const byType = new Map();
   pages.forEach(p=>{ if(!byType.has(p.type)) byType.set(p.type,[]); byType.get(p.type).push(p); });
   currentGroups = Array.from(byType.entries()).map(([type,list])=>({type,list}));
   const docsEl = document.getElementById('docs'); docsEl.innerHTML='';
-  let downloadsNs=null;
-  try{ downloadsNs = await claude.use('downloads'); }catch(e){}
-  if(!downloadsNs){
-    const warn=document.createElement('p'); warn.className='status'; warn.style.color='var(--warn)';
-    warn.textContent="Saving isn't available in this preview. Open this artifact by its own link (not embedded in chat) and try again.";
-    docsEl.appendChild(warn);
-  }
+  const downloadsNs = downloadsShim;
   for (const g of currentGroups){
     const label = TYPES.find(t=>t[0]===g.type)?.[1] || g.type;
     const row = document.createElement('div'); row.className='doc';
     row.innerHTML = `<div class="meta"><b>${label}</b><span>${g.list.length} item(s)</span><span class="errmsg"></span></div>`;
     const btn = document.createElement('button'); btn.textContent='Download PDF';
-    if(!downloadsNs){ btn.disabled=true; btn.title='Downloads not available in this view'; }
     const errEl = row.querySelector('.errmsg');
     btn.addEventListener('click', async ()=>{
       btn.disabled=true; btn.textContent='Preparing…'; errEl.textContent='';
@@ -581,11 +615,11 @@ document.getElementById('combineAllBtn').addEventListener('click', async ()=>{
   const btn = document.getElementById('combineAllBtn');
   btn.disabled=true; const orig=btn.textContent; btn.textContent='Preparing…';
   try{
-    let downloadsNs = await claude.use('downloads');
+    const downloadsNs = downloadsShim;
     const bytes = await pagesToPdfBytes(pages);
     await downloadsNs.save({filename:'combined-documents.pdf', data:new Blob([bytes],{type:'application/pdf'})});
     btn.textContent='Saved ✓';
-  }catch(err){ btn.textContent='Failed — retry'; }
+  }catch(err){ btn.textContent='Failed — retry'; alert((err&&err.message)||'Could not combine the PDF.'); }
   finally{ btn.disabled=false; setTimeout(()=>btn.textContent=orig,2000); }
 });
 
@@ -594,8 +628,7 @@ document.getElementById('zipAllBtn').addEventListener('click', async ()=>{
   const btn = document.getElementById('zipAllBtn');
   btn.disabled=true; const orig=btn.textContent;
   try{
-    const downloadsNs = await claude.use('downloads');
-    if(!downloadsNs) throw new Error("Saving isn't available in this view — open this artifact by its own link and try again.");
+    const downloadsNs = downloadsShim;
     const zip = new JSZip();
     for (const g of currentGroups){
       if(!g.list.length) continue;
@@ -649,136 +682,6 @@ function renderInfoCard(){
     li.style.color = present.has(id) ? '' : 'var(--sub)';
     ml.appendChild(li);
   });
-
-  const allText = pages.map(p=>p.text||'').join('\n');
-  // Scope passport fields to pages actually labeled as the passport, and transcript fields to
-  // pages labeled as a transcript — falls back to everything if nothing's been labeled that way yet.
-  const passportText = pages.filter(p=>p.type==='passport_front').map(p=>p.text||'').join('\n') || allText;
-  const transcriptText = pages.filter(p=>/transcript/.test(p.type)).map(p=>p.text||'').join('\n') || allText;
-  const fields = {};
-
-  // ---- Passport / identity details (name, passport no., DOB, nationality, sex, dates) ----
-  // Try the printed machine-readable zone first (two MRZ lines) — most reliable when present.
-  (function mrz(){
-    const compact = passportText.replace(/[\s]/g,'');
-    const m1 = compact.match(/P[<K]([A-Z]{3})([A-Z<]{2,39})/);
-    const m2 = compact.match(/([A-Z0-9<]{9})[0-9]([A-Z]{3})(\d{6})[0-9]([MFX<])(\d{6})[0-9]/);
-    if (m1){
-      const names = m1[2].split('<<').filter(Boolean);
-      if(names.length){
-        const surname = names[0].replace(/</g,' ').trim();
-        const given = (names[1]||'').replace(/</g,' ').trim();
-        if(surname||given) fields['Full name'] = [given,surname].filter(Boolean).join(' ');
-      }
-      if(!fields['Nationality']) fields['Nationality'] = m1[1];
-    }
-    if (m2){
-      const passNo = m2[1].replace(/</g,'').trim();
-      if(passNo) fields['Passport number'] = passNo;
-      if(!fields['Nationality']) fields['Nationality'] = m2[2];
-      const dob = m2[3], yy=parseInt(dob.slice(0,2)), mo=dob.slice(2,4), da=dob.slice(4,6);
-      const dobYear = yy < 30 ? 2000+yy : 1900+yy; // heuristic century pivot for 2-digit MRZ years
-      fields['Date of birth'] = `${da}/${mo}/${dobYear}`;
-      fields['Sex'] = m2[4]==='M'?'Male':(m2[4]==='F'?'Female':m2[4]);
-      const exp = m2[5], eyy=parseInt(exp.slice(0,2)), emo=exp.slice(2,4), eda=exp.slice(4,6);
-      const expYear = 2000+eyy;
-      const d = new Date(expYear, parseInt(emo)-1, parseInt(eda));
-      fields['Passport expiry'] = `${eda}/${emo}/${expYear}`;
-      fields['Passport valid?'] = d > new Date() ? `Valid (until ${eda}/${emo}/${expYear})` : `Expired (${eda}/${emo}/${expYear})`;
-    }
-  })();
-
-  let m;
-  if(!fields['Passport number']){
-    m = passportText.match(/passport\s*no\.?\s*[:\-]?\s*([A-Z0-9]{6,9})/i)
-      || passportText.match(/رقم\s*ال?جواز\s*(?:السفر)?\s*[:\-]?\s*([A-Za-z0-9]{6,12})/)
-      || passportText.match(/护照号码?\s*[:：]?\s*([A-Za-z0-9]{6,12})/);
-    if(m) fields['Passport number']=m[1];
-  }
-  if(!fields['Full name']){
-    m = passportText.match(/given names?\s*[:\-]?\s*([A-Z][A-Za-z .]{2,40})/i); const given = m?m[1].trim():null;
-    m = passportText.match(/surname\s*[:\-]?\s*([A-Z][A-Za-z .]{2,40})/i); const sur = m?m[1].trim():null;
-    if(given||sur) fields['Full name'] = [given,sur].filter(Boolean).join(' ');
-    if(!fields['Full name']){
-      m = passportText.match(/الاسم\s*(?:الكامل)?\s*[:\-]?\s*([\u0600-\u06FF\s]{2,40})/);
-      if(m) fields['Full name'] = m[1].trim();
-    }
-    if(!fields['Full name']){
-      m = passportText.match(/姓名\s*[:：]?\s*([\u4e00-\u9fff·]{2,10})/);
-      if(m) fields['Full name'] = m[1].trim();
-    }
-  }
-  if(!fields['Date of birth']){
-    m = passportText.match(/date of birth\s*[:\-]?\s*(\d{1,2}\D\d{1,2}\D\d{2,4})/i)
-      || passportText.match(/تاريخ\s*الميلاد\s*[:\-]?\s*([\u0660-\u06690-9\/\-\.]{6,12})/)
-      || passportText.match(/出生日期\s*[:：]?\s*([0-9年月日\-\/\.]{6,16})/);
-    if(m) fields['Date of birth']=m[1].trim();
-  }
-  if(!fields['Nationality']){
-    m = passportText.match(/nationality\s*[:\-]?\s*([A-Za-z][A-Za-z .]{2,30})/i)
-      || passportText.match(/الجنسية\s*[:\-]?\s*([\u0600-\u06FF\s]{2,20})/)
-      || passportText.match(/国籍\s*[:：]?\s*([\u4e00-\u9fff]{2,10})/);
-    if(m) fields['Nationality']=m[1].trim();
-  }
-  if(!fields['Sex']){
-    m = passportText.match(/\bsex\s*[:\-]?\s*([MF])\b/i) || passportText.match(/gender\s*[:\-]?\s*(male|female)/i);
-    if(m) fields['Sex'] = /^m/i.test(m[1]) ? 'Male' : 'Female';
-    else{
-      m = passportText.match(/الجنس\s*[:\-]?\s*(ذكر|أنثى)/); if(m) fields['Sex']=m[1];
-      else{ m = passportText.match(/性别\s*[:：]?\s*(男|女)/); if(m) fields['Sex']=m[1]; }
-    }
-  }
-  if(!fields['Passport expiry']){
-    m = passportText.match(/date of expiry\D{0,15}(\d{1,2})\D(\d{1,2})\D(\d{4})/i);
-    if(m){
-      const d = new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
-      fields['Passport expiry'] = `${m[1]}/${m[2]}/${m[3]}`;
-      fields['Passport valid?'] = d > new Date() ? `Valid (until ${m[1]}/${m[2]}/${m[3]})` : `Expired (${m[1]}/${m[2]}/${m[3]})`;
-    }
-  }
-
-  // ---- Transcript / academic details (CGPA, program, school, study period, credit hours) ----
-  m = transcriptText.match(/(?:cgpa|g\.?p\.?a\.?)\D{0,10}(\d(?:\.\d{1,2})?)\b/i)
-    || transcriptText.match(/(?:المعدل\s*التراكمي|المعدل)\D{0,10}(\d{1,3}(?:\.\d+)?)/)
-    || transcriptText.match(/(?:绩点|平均学分绩点)\D{0,10}(\d(?:\.\d{1,2})?)/);
-  if(m) fields['CGPA / GPA (stated)'] = m[1];
-  else{
-    m = transcriptText.match(/(?:percentage|general evaluation)\D{0,10}(\d{1,3}(?:\.\d+)?)\s*%?/i);
-    if(m) fields['Grade / percentage (stated)'] = m[1]+(transcriptText.includes('%')?'%':'');
-  }
-  if(!fields['CGPA / GPA (stated)'] && !fields['Grade / percentage (stated)']){
-    // Nothing explicitly stated — estimate it from the individual grades listed on the transcript.
-    const GRADE_POINTS = {'A+':4.0,'A':4.0,'A-':3.7,'B+':3.3,'B':3.0,'B-':2.7,'C+':2.3,'C':2.0,'C-':1.7,'D+':1.3,'D':1.0,'F':0.0};
-    const letterMatches = [...transcriptText.matchAll(/(?:^|[\s:])([A-D][+\-]?|F)(?=[\s.,\n]|$)/g)].map(mm=>mm[1]);
-    const validLetters = letterMatches.filter(g=>GRADE_POINTS.hasOwnProperty(g));
-    if(validLetters.length >= 3){
-      const avg = validLetters.reduce((s,g)=>s+GRADE_POINTS[g],0)/validLetters.length;
-      fields['CGPA (calculated from listed grades — estimate)'] = avg.toFixed(2)+` (from ${validLetters.length} grades, verify manually)`;
-    } else {
-      const pctMatches = [...transcriptText.matchAll(/\b(\d{2,3})\s*(?:%|\/\s*100)\b/g)].map(mm=>parseInt(mm[1])).filter(n=>n>=30&&n<=100);
-      if(pctMatches.length >= 3){
-        const avg = pctMatches.reduce((s,n)=>s+n,0)/pctMatches.length;
-        fields['Average result (calculated from marks — estimate)'] = avg.toFixed(1)+`% (from ${pctMatches.length} marks, verify manually)`;
-      }
-    }
-  }
-  m = transcriptText.match(/total credit(?:s)? hours?\D{0,10}(\d{2,4})/i)
-    || transcriptText.match(/总学分\D{0,10}(\d{2,4})/)
-    || transcriptText.match(/مجموع\s*الساعات\s*المعتمدة\D{0,10}(\d{2,4})/);
-  if(m) fields['Total credit hours'] = m[1];
-
-  m = allText.match(/(Bachelor|Master|PhD|Doctor)\s+of\s+([A-Za-z &]{2,40})/i); if(m) fields['Program']=`${m[1]} of ${m[2].trim()}`;
-  m = allText.match(/University\s+of\s+([A-Za-z &]{2,40})/i); if(m) fields['School / university']=`University of ${m[1].trim()}`;
-  const years = [...allText.matchAll(/academic year\s*[:\-]?\s*(\d{4})\/(\d{4})/gi)].map(mm=>[parseInt(mm[1]),parseInt(mm[2])]);
-  if(years.length){
-    const start = Math.min(...years.map(y=>y[0])), end = Math.max(...years.map(y=>y[1]));
-    fields['Study period'] = `${start} – ${end}`;
-  }
-
-  const fe = document.getElementById('fields'); fe.innerHTML='';
-  const keys = Object.keys(fields);
-  if(!keys.length){ fe.innerHTML = '<p class="status">Nothing could be auto-extracted from readable text yet.</p>'; }
-  keys.forEach(k=>{ const d=document.createElement('div'); d.className='field'; d.innerHTML=`<b>${k}</b><span>${fields[k]}</span>`; fe.appendChild(d); });
 }
 </script>
 </body>
