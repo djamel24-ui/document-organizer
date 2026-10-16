@@ -532,13 +532,35 @@ document.addEventListener('keydown', e=>{ if(lbEl.classList.contains('hidden')) 
 let currentGroups = [];
 document.getElementById('groupBtn').addEventListener('click', buildGroups);
 
+// Fallback for encrypted PDFs: pdf-lib can't copy their pages, but pdf.js already opened them
+// (they have no open-password), so draw each page as a high-quality image instead.
+async function addRenderedPdfPage(out, p){
+  const page = await files[p.fileIdx].pdfDoc.getPage(p.pdfPageNum);
+  const rot = p.rotation || 0;
+  const base = page.getViewport({scale:1, rotation:rot});
+  const hi = page.getViewport({scale:2, rotation:rot});
+  const canvas = document.createElement('canvas'); canvas.width = hi.width; canvas.height = hi.height;
+  await page.render({canvasContext:canvas.getContext('2d'), viewport:hi}).promise;
+  const blob = await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.88));
+  const img = await out.embedJpg(await blob.arrayBuffer());
+  const pg = out.addPage([base.width, base.height]);
+  pg.drawImage(img, {x:0, y:0, width:base.width, height:base.height});
+}
+
 async function pagesToPdfBytes(pageList){
   const out = await PDFDocument.create();
   const cache = {};
   const font = await out.embedFont(StandardFonts.Helvetica);
   for (const p of pageList){
     if (p.kind==='pdf'){
-      if(!cache[p.fileIdx]) cache[p.fileIdx] = await PDFDocument.load(files[p.fileIdx].bytes.slice(0));
+      if(!(p.fileIdx in cache)){
+        try{ cache[p.fileIdx] = await PDFDocument.load(files[p.fileIdx].bytes.slice(0)); }
+        catch(e){
+          if(/encrypt/i.test((e && e.message) || '')) cache[p.fileIdx] = null; // use the image fallback
+          else throw e;
+        }
+      }
+      if(cache[p.fileIdx] === null){ await addRenderedPdfPage(out, p); continue; }
       const [copied] = await out.copyPages(cache[p.fileIdx], [p.pdfPageNum-1]);
       if (p.rotation){
         const base = copied.getRotation().angle || 0;
