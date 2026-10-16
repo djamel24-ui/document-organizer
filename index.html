@@ -75,6 +75,19 @@ label.chk{display:flex;align-items:center;gap:6px;font-size:.88rem;}
   <h1>Scan Your Documents</h1>
   <p class="lead">Upload one or more files — PDFs, Word documents, images, or a mix — and this sorts every page into the right document type, lets you fix anything by hand (one at a time or in bulk), then shows what's missing and pulls out key details automatically where the text is readable.</p>
 
+  <div class="card" id="sessCard">
+    <div class="toprow" style="justify-content:space-between;">
+      <b>Saved work <span style="font-weight:400;color:var(--sub);font-size:.82rem">(kept in this browser, saves automatically)</span></b>
+      <button class="small secondary" id="newSessBtn">+ New session</button>
+    </div>
+    <div class="bulkbar hidden" id="sessNameBar">
+      <label for="sessName" style="font-size:.88rem">Name:</label>
+      <input type="text" id="sessName" style="flex:1;min-width:200px" placeholder="e.g. Ahmed – Bachelor application">
+      <span class="status" id="sessStatus" style="margin:0"></span>
+    </div>
+    <div class="docs" id="sessList"></div>
+  </div>
+
   <div class="card">
     <div class="dropzone" id="drop">
       <input type="file" id="file" multiple accept=".pdf,.docx,.jpg,.jpeg,.png">
@@ -424,6 +437,7 @@ function renderGrid(){
     const id = parseInt(e.target.dataset.id);
     if(e.target.checked) selected.add(id); else selected.delete(id);
   }));
+  scheduleSave();
 }
 
 document.getElementById('selAll').addEventListener('click', ()=>{ pages.forEach(p=>selected.add(p.id)); renderGrid(); });
@@ -705,6 +719,166 @@ function renderInfoCard(){
     ml.appendChild(li);
   });
 }
+
+// ===== Saved sessions (stored in this browser with IndexedDB) =====
+// 'sessions' holds a small summary per session (for the list); 'data' holds the heavy part
+// (original file bytes + page labels/rotations), so the list loads instantly.
+const DB_NAME = 'scanDocsDB';
+let currentSessionId = null, currentName = '', restoring = false, saveTimer = null;
+const sessNameBar = document.getElementById('sessNameBar');
+const sessNameInput = document.getElementById('sessName');
+const sessStatus = document.getElementById('sessStatus');
+const sessList = document.getElementById('sessList');
+
+function dbOpen(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = ()=>{ r.result.createObjectStore('sessions',{keyPath:'id'}); r.result.createObjectStore('data',{keyPath:'id'}); };
+    r.onsuccess = ()=>res(r.result);
+    r.onerror = ()=>rej(r.error);
+  });
+}
+async function dbRun(stores, mode, fn){
+  const db = await dbOpen();
+  return new Promise((res,rej)=>{
+    const tx = db.transaction(stores, mode);
+    const out = fn(...stores.map(s=>tx.objectStore(s)));
+    tx.oncomplete = ()=>{ db.close(); res(out && out.result); };
+    tx.onerror = tx.onabort = ()=>{ db.close(); rej(tx.error || new Error('Browser storage error')); };
+  });
+}
+
+function defaultName(){
+  const first = (files[0] && files[0].name || 'Documents').replace(/\.[^.]+$/,'');
+  return first + ' – ' + new Date().toLocaleDateString();
+}
+function fmtTime(ts){ return new Date(ts).toLocaleString([], {dateStyle:'medium', timeStyle:'short'}); }
+
+function scheduleSave(){
+  if (restoring || !pages.length) return;
+  clearTimeout(saveTimer);
+  sessStatus.textContent = 'Saving…';
+  saveTimer = setTimeout(saveNow, 700);
+}
+async function saveNow(){
+  if (restoring || !pages.length) return;
+  if (!currentSessionId){
+    currentSessionId = 's' + Date.now();
+    currentName = defaultName();
+  }
+  sessNameInput.value = currentName;
+  sessNameBar.classList.remove('hidden');
+  const meta = {id:currentSessionId, name:currentName, updated:Date.now(), pageCount:pages.length, fileCount:files.length};
+  const data = {
+    id: currentSessionId,
+    files: files.map(f=>({kind:f.kind, name:f.name, bytes:f.bytes, mime:f.mime})),
+    pages: pages.map(p=>({...p})),
+    pageSeq,
+    settings: {
+      level: document.getElementById('levelSel').value,
+      china: document.getElementById('chinaChk').checked,
+      gap: document.getElementById('gapChk').checked,
+      mode: document.getElementById('modeSel').value
+    }
+  };
+  try{
+    await dbRun(['sessions','data'], 'readwrite', (s,d)=>{ s.put(meta); d.put(data); });
+    sessStatus.textContent = 'Saved ✓ ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    refreshSessList();
+  }catch(e){
+    sessStatus.textContent = "⚠ Couldn't save in this browser (storage full or blocked, or a private window).";
+  }
+}
+
+async function refreshSessList(){
+  let list = [];
+  try{ list = await dbRun(['sessions'], 'readonly', s=>s.getAll()); }catch(e){ sessList.innerHTML=''; return; }
+  list.sort((a,b)=>b.updated-a.updated);
+  sessList.innerHTML = '';
+  if (!list.length){ sessList.innerHTML = '<div class="status">Nothing saved yet. Upload files and your work saves automatically.</div>'; return; }
+  list.forEach(m=>{
+    const row = document.createElement('div'); row.className = 'doc';
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const nm = document.createElement('b'); nm.textContent = m.name + (m.id===currentSessionId ? '  (open)' : '');
+    const sp = document.createElement('span'); sp.textContent = `${m.pageCount} page(s) · ${m.fileCount} file(s) · ${fmtTime(m.updated)}`;
+    meta.append(nm, sp); row.appendChild(meta);
+    const openBtn = document.createElement('button'); openBtn.className='small'; openBtn.textContent='Open';
+    openBtn.addEventListener('click', ()=>openSession(m.id));
+    const delBtn = document.createElement('button'); delBtn.className='small secondary'; delBtn.textContent='Delete';
+    delBtn.addEventListener('click', async ()=>{
+      if (!confirm(`Delete "${m.name}" from this browser? This can't be undone.`)) return;
+      await dbRun(['sessions','data'], 'readwrite', (s,d)=>{ s.delete(m.id); d.delete(m.id); });
+      if (m.id === currentSessionId) newSession();
+      refreshSessList();
+    });
+    row.append(openBtn, delBtn); sessList.appendChild(row);
+  });
+}
+
+function resetUi(){
+  files = []; pages = []; pageSeq = 0; selected.clear(); currentGroups = [];
+  document.getElementById('pagesCard').classList.add('hidden');
+  document.getElementById('docsCard').classList.add('hidden');
+  document.getElementById('infoCard').classList.add('hidden');
+  document.getElementById('grid').innerHTML = '';
+  document.getElementById('dzLabel').textContent = '📄 Click to choose files, or drag them here — PDF, Word, JPG, PNG, any mix';
+  document.getElementById('status').textContent = '';
+  document.getElementById('file').value = '';
+}
+function newSession(){
+  clearTimeout(saveTimer);
+  currentSessionId = null; currentName = '';
+  sessNameBar.classList.add('hidden'); sessStatus.textContent = '';
+  resetUi(); refreshSessList();
+}
+
+async function openSession(id){
+  restoring = true; clearTimeout(saveTimer);
+  const st = document.getElementById('status');
+  try{
+    st.textContent = 'Opening saved session…';
+    const [meta, data] = await Promise.all([
+      dbRun(['sessions'], 'readonly', s=>s.get(id)),
+      dbRun(['data'], 'readonly', d=>d.get(id))
+    ]);
+    if (!meta || !data) throw new Error('Saved session not found');
+    resetUi();
+    files = data.files; pages = data.pages; pageSeq = data.pageSeq || (pages.reduce((m,p)=>Math.max(m,p.id),0)+1);
+    for (const f of files){
+      if (f.kind === 'pdf') f.pdfDoc = await pdfjsLib.getDocument({data: f.bytes.slice(0)}).promise;
+    }
+    const s = data.settings || {};
+    if (s.level) document.getElementById('levelSel').value = s.level;
+    document.getElementById('chinaChk').checked = !!s.china;
+    document.getElementById('gapChk').checked = !!s.gap;
+    if (s.mode) document.getElementById('modeSel').value = s.mode;
+    syncControls();
+    currentSessionId = id; currentName = meta.name;
+    sessNameInput.value = currentName; sessNameBar.classList.remove('hidden');
+    document.getElementById('dzLabel').textContent = `📄 ${files.length} file(s) in this session — add more by clicking or dragging here`;
+    st.textContent = `Opened "${meta.name}" — ${pages.length} page(s). Labels and rotations are restored.`;
+    const unreadPages = pages.filter(p=>!p.confident && !p.manual && p.kind!=='docx').length;
+    document.getElementById('ocrNote').textContent = unreadPages ? `${unreadPages} page(s) are still unread — press the button below to continue reading them (pages already read stay saved).` : '';
+    document.getElementById('runOcrBtn').classList.toggle('hidden', unreadPages===0);
+    renderGrid();
+    document.getElementById('pagesCard').classList.remove('hidden');
+    sessStatus.textContent = 'Saved ✓';
+  }catch(e){
+    st.textContent = "Couldn't open that saved session: " + ((e && e.message) || e);
+    resetUi();
+  }finally{
+    restoring = false; refreshSessList();
+  }
+}
+
+sessNameInput.addEventListener('input', ()=>{ currentName = sessNameInput.value.trim() || defaultName(); scheduleSave(); });
+document.getElementById('newSessBtn').addEventListener('click', ()=>{
+  if (pages.length && !confirm('Start a new session? The current one stays saved — you can reopen it from the list.')) return;
+  newSession();
+});
+['levelSel','chinaChk','gapChk','modeSel'].forEach(id=>document.getElementById(id).addEventListener('change', scheduleSave));
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+refreshSessList();
 </script>
 </body>
 </html>
